@@ -1,16 +1,11 @@
 #include "Lobby.hpp"
 #include <managers/SwapManager.hpp>
-
 #include <network/manager.hpp>
 #include <network/packets/server.hpp>
 #include <network/packets/client.hpp>
-
 #include "LobbySettings.hpp"
 #include "ChatPanel.hpp"
-
 #include <cvolton.level-id-api/include/EditorIDs.hpp>
-
-// ==================== PlayerCell ==================== //
 
 PlayerCell* PlayerCell::create(Account account, float width, bool canKick) {
     auto ret = new PlayerCell;
@@ -25,10 +20,7 @@ PlayerCell* PlayerCell::create(Account account, float width, bool canKick) {
 bool PlayerCell::init(Account account, float width, bool canKick) {
     m_account = account;
 
-    this->setContentSize({
-        width,
-        CELL_HEIGHT
-    });
+    this->setContentSize({ width, CELL_HEIGHT });
 
     auto player = SimplePlayer::create(0);
     auto gm = GameManager::get();
@@ -49,7 +41,6 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
 
     this->addChild(player);
 
-    // === Имя игрока (кликабельное — открывает профиль) === //
     auto nameLabel = CCLabelBMFont::create(account.name.c_str(), "bigFont.fnt");
     nameLabel->limitLabelWidth(225.f, 0.8f, 0.1f);
     nameLabel->setAnchorPoint({ 0.f, 0.5f });
@@ -90,14 +81,11 @@ void PlayerCell::onKickUser(CCObject* sender) {
         "Close", "Kick",
         [this](auto, bool btn2) {
             if (!btn2) return;
-
             auto& nm = NetworkManager::get();
             nm.send(KickUserPacket::create(m_account.userID));
         }
     );
 }
-
-// ==================== LobbyLayer ==================== //
 
 LobbyLayer* LobbyLayer::create(std::string code) {
     auto ret = new LobbyLayer();
@@ -111,6 +99,7 @@ LobbyLayer* LobbyLayer::create(std::string code) {
 
 bool LobbyLayer::init(std::string code) {
     lobbyCode = code;
+    m_alive = std::make_shared<bool>(true);
 
     ChatPanel::initialize();
 
@@ -121,12 +110,8 @@ bool LobbyLayer::init(std::string code) {
     mainLayer->setContentSize(size);
 
     background = CCSprite::create("GJ_gradientBG.png");
-    background->setScaleX(
-        size.width / background->getContentWidth()
-    );
-    background->setScaleY(
-        size.height / background->getContentHeight()
-    );
+    background->setScaleX(size.width / background->getContentWidth());
+    background->setScaleY(size.height / background->getContentHeight());
     background->setAnchorPoint({ 0, 0 });
     background->setColor({ 0, 102, 255 });
     background->setZOrder(-10);
@@ -150,9 +135,7 @@ bool LobbyLayer::init(std::string code) {
     auto closeMenu = CCMenu::create();
     closeMenu->addChild(closeBtn);
     closeMenu->addChild(disconnectBtn);
-    closeMenu->setLayout(
-        RowLayout::create()
-    );
+    closeMenu->setLayout(RowLayout::create());
     closeMenu->setPosition({ 45, size.height - 25 });
     mainLayer->addChild(closeMenu);
 
@@ -167,9 +150,7 @@ bool LobbyLayer::init(std::string code) {
     auto startMenu = CCMenu::create();
     startMenu->setZOrder(5);
     startMenu->addChild(startBtn);
-    startMenu->setPosition({
-        size.width / 2, 30.f
-    });
+    startMenu->setPosition({ size.width / 2, 30.f });
 
     mainLayer->addChild(startMenu);
 
@@ -189,8 +170,9 @@ bool LobbyLayer::init(std::string code) {
     auto refreshBtn = CCMenuItemExt::createSpriteExtraWithFrameName(
         "GJ_getSongInfoBtn_001.png",
         1.f,
-        [this](CCObject* sender) {
-            SwapManager::get().getLobbyInfo([this](LobbyInfo info) {
+        [this, alive = m_alive](CCObject* sender) {
+            SwapManager::get().getLobbyInfo([this, alive](LobbyInfo info) {
+                if (!*alive) return;
                 refresh(info);
             });
         }
@@ -202,29 +184,21 @@ bool LobbyLayer::init(std::string code) {
     bottomMenu->addChild(msgButton);
     bottomMenu->addChild(settingsBtn);
     bottomMenu->addChild(refreshBtn);
-    bottomMenu->setPosition(
-        size.width - 25.f, bottomMenu->getChildrenCount() * 25.f
-    );
-
-    bottomMenu->setLayout(
-        ColumnLayout::create()
-            ->setAxisReverse(true)
-    );
+    bottomMenu->setPosition(size.width - 25.f, bottomMenu->getChildrenCount() * 25.f);
+    bottomMenu->setLayout(ColumnLayout::create()->setAxisReverse(true));
 
     auto discordSpr = CCSprite::createWithSpriteFrameName("gj_discordIcon_001.png");
     discordSpr->setScale(1.25f);
     auto discordBtn = CCMenuItemExt::createSpriteExtra(
         discordSpr,
-        [this](CCObject* target) {
+        [](CCObject* target) {
             geode::createQuickPopup(
                 "Discord Server",
                 "We have a <cb>Discord Server</c>! If you have questions, want to suggest a feature, or find someone to swap with, join here! \n<cl>Please not that you need to be at least 13 years of age to join our server.</c>",
                 "Cancel", "Join!",
-                [this](auto, bool btn2) {
+                [](auto, bool btn2) {
                     if (!btn2) return;
-                    CCApplication::get()->openURL(
-                        Mod::get()->getMetadata().getLinks().getCommunityURL()->c_str()
-                    );
+                    CCApplication::get()->openURL(Mod::get()->getMetadata().getLinks().getCommunityURL()->c_str());
                 }
             );
         }
@@ -239,7 +213,8 @@ bool LobbyLayer::init(std::string code) {
     this->addChild(mainLayer);
     this->addChild(bottomMenu);
 
-    SwapManager::get().getLobbyInfo([this](LobbyInfo info) {
+    SwapManager::get().getLobbyInfo([this, alive = m_alive](LobbyInfo info) {
+        if (!*alive) return;
         refresh(info, true);
     });
     registerListeners();
@@ -249,18 +224,19 @@ bool LobbyLayer::init(std::string code) {
 
 void LobbyLayer::registerListeners() {
     auto& nm = NetworkManager::get();
-    nm.on<LobbyUpdatedPacket>([this](LobbyUpdatedPacket packet) {
+    nm.on<LobbyUpdatedPacket>([this, alive = m_alive](LobbyUpdatedPacket packet) {
+        if (!*alive) return;
         this->refresh(std::move(packet.info));
     });
-    nm.on<SwapStartedPacket>([this](SwapStartedPacket packet) {
+    nm.on<SwapStartedPacket>([](SwapStartedPacket packet) {
         auto& sm = SwapManager::get();
         sm.startSwap(std::move(packet));
         NetworkManager::get().unbind<SwapStartedPacket>();
     });
     nm.showDisconnectPopup = true;
-    nm.setDisconnectCallback([this](std::string reason) {
+    nm.setDisconnectCallback([this, alive = m_alive](std::string reason) {
+        if (!*alive) return;
         unregisterListeners();
-
         auto& nm = NetworkManager::get();
         nm.isConnected = false;
         nm.showDisconnectPopup = false;
@@ -271,9 +247,14 @@ void LobbyLayer::registerListeners() {
 void LobbyLayer::unregisterListeners() {
     auto& nm = NetworkManager::get();
     nm.unbind<LobbyUpdatedPacket>();
+    nm.unbind<SwapStartedPacket>();
+    nm.setDisconnectCallback(nullptr);
 }
 
 LobbyLayer::~LobbyLayer() {
+    if (m_alive) {
+        *m_alive = false;
+    }
     unregisterListeners();
 }
 
@@ -285,26 +266,18 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
 
     if (!mainLayer) return;
 
-    // === Заголовок (создаётся только при первом вызове) === //
     if (isFirstRefresh) {
-        titleLabel = CCLabelBMFont::create(
-            info.settings.name.c_str(),
-            "bigFont.fnt"
-        );
+        titleLabel = CCLabelBMFont::create(info.settings.name.c_str(), "bigFont.fnt");
         titleLabel->limitLabelWidth(275.f, 1.f, 0.1f);
 
         auto menu = CCMenu::create();
-        menu->setPosition({
-            size.width / 2, size.height - 25
-        });
+        menu->setPosition({ size.width / 2, size.height - 25 });
 
         menu->addChild(
             CCMenuItemExt::createSpriteExtra(
                 titleLabel,
                 [info](CCObject* sender) {
-                    geode::utils::clipboard::write(
-                        info.code
-                    );
+                    geode::utils::clipboard::write(info.code);
                     Notification::create("Copied code to clipboard")->show();
                 }
             )
@@ -345,18 +318,17 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
 
     mainLayer->addChild(playerList);
 
-    if (!mainLayer->getChildByIDRecursive("list-bg")) {
-        auto listBG = CCLayerColor::create({ 0, 0, 0, 85 });
+    auto listBG = static_cast<CCLayerColor*>(mainLayer->getChildByIDRecursive("list-bg"));
+    if (!listBG) {
+        listBG = CCLayerColor::create({ 0, 0, 0, 85 });
         listBG->ignoreAnchorPointForPosition(false);
         listBG->setAnchorPoint({ 0.5f, 0.5f });
-        listBG->setPosition(
-            playerList->getPosition()
-        );
         listBG->setZOrder(-1);
         listBG->setID("list-bg");
-        listBG->setContentSize(playerList->getContentSize());
         mainLayer->addChild(listBG);
     }
+    listBG->setPosition(playerList->getPosition());
+    listBG->setContentSize(playerList->getContentSize());
 
     if (settingsBtn) settingsBtn->setVisible(isOwner);
     if (startBtn) startBtn->setVisible(isOwner);
@@ -379,8 +351,10 @@ void LobbyLayer::onStart(CCObject* sender) {
 
 void LobbyLayer::onSettings(CCObject* sender) {
     auto& lm = SwapManager::get();
-    lm.getLobbyInfo([this](LobbyInfo info) {
-        auto settingsPopup = LobbySettingsPopup::create(info.settings, [this](LobbySettings settings) {
+    lm.getLobbyInfo([this, alive = m_alive](LobbyInfo info) {
+        if (!*alive) return;
+        auto settingsPopup = LobbySettingsPopup::create(info.settings, [this, alive](LobbySettings settings) {
+            if (!*alive) return;
             auto& lm = SwapManager::get();
             lm.updateLobby(settings);
         });
@@ -394,53 +368,29 @@ void LobbyLayer::createBorders() {
     const int SIDE_OFFSET = 7;
     const int TOP_BOTTOM_OFFSET = 8;
 
-    // TOP //
     auto topSide = CREATE_SIDE();
-    topSide->setScaleY(
-        playerList->getContentWidth() / topSide->getContentHeight()
-    );
+    topSide->setScaleY(playerList->getContentWidth() / topSide->getContentHeight());
     topSide->setRotation(90.f);
-    topSide->setPosition({
-        playerList->m_width / 2,
-        playerList->m_height + TOP_BOTTOM_OFFSET
-    });
+    topSide->setPosition({ playerList->m_width / 2, playerList->m_height + TOP_BOTTOM_OFFSET });
     topSide->setID("top-border");
     topSide->setZOrder(3);
 
-    // BOTTOM //
     auto bottomSide = CREATE_SIDE();
-    bottomSide->setScaleY(
-        playerList->getContentWidth() / bottomSide->getContentHeight()
-    );
+    bottomSide->setScaleY(playerList->getContentWidth() / bottomSide->getContentHeight());
     bottomSide->setRotation(-90.f);
-    bottomSide->setPosition({
-        playerList->m_width / 2,
-        0 - TOP_BOTTOM_OFFSET
-    });
+    bottomSide->setPosition({ playerList->m_width / 2, 0.f - TOP_BOTTOM_OFFSET });
     bottomSide->setID("bottom-border");
     bottomSide->setZOrder(3);
 
-    // LEFT //
     auto leftSide = CREATE_SIDE();
-    leftSide->setScaleY(
-        (playerList->getContentHeight() + TOP_BOTTOM_OFFSET) / leftSide->getContentHeight()
-    );
-    leftSide->setPosition({
-        -SIDE_OFFSET,
-        playerList->m_height / 2
-    });
+    leftSide->setScaleY((playerList->getContentHeight() + TOP_BOTTOM_OFFSET) / leftSide->getContentHeight());
+    leftSide->setPosition({ -SIDE_OFFSET, playerList->m_height / 2 });
     leftSide->setID("left-border");
 
-    // RIGHT //
     auto rightSide = CREATE_SIDE();
-    rightSide->setScaleY(
-        (playerList->getContentHeight() + TOP_BOTTOM_OFFSET) / rightSide->getContentHeight()
-    );
+    rightSide->setScaleY((playerList->getContentHeight() + TOP_BOTTOM_OFFSET) / rightSide->getContentHeight());
     rightSide->setRotation(180.f);
-    rightSide->setPosition({
-        playerList->m_width + SIDE_OFFSET,
-        playerList->m_height / 2
-    });
+    rightSide->setPosition({ playerList->m_width + SIDE_OFFSET, playerList->m_height / 2 });
     rightSide->setID("right-border");
 
     playerList->addChild(topSide);
@@ -448,42 +398,29 @@ void LobbyLayer::createBorders() {
     playerList->addChild(leftSide);
     playerList->addChild(rightSide);
 
-    // CORNERS //
     #define CREATE_CORNER() CCSprite::createWithSpriteFrameName("GJ_table_corner_001.png")
 
-    // TOP-LEFT //
     auto topLeftCorner = CREATE_CORNER();
-    topLeftCorner->setPosition({
-        leftSide->getPositionX(), topSide->getPositionY()
-    });
+    topLeftCorner->setPosition({ leftSide->getPositionX(), topSide->getPositionY() });
     topLeftCorner->setZOrder(2);
     topLeftCorner->setID("top-left-corner");
 
-    // TOP-RIGHT //
     auto topRightCorner = CREATE_CORNER();
     topRightCorner->setFlipX(true);
-    topRightCorner->setPosition({
-        rightSide->getPositionX(), topSide->getPositionY()
-    });
+    topRightCorner->setPosition({ rightSide->getPositionX(), topSide->getPositionY() });
     topRightCorner->setZOrder(2);
     topRightCorner->setID("top-right-corner");
 
-    // BOTTOM-LEFT //
     auto bottomLeftCorner = CREATE_CORNER();
     bottomLeftCorner->setFlipY(true);
-    bottomLeftCorner->setPosition({
-        leftSide->getPositionX(), bottomSide->getPositionY()
-    });
+    bottomLeftCorner->setPosition({ leftSide->getPositionX(), bottomSide->getPositionY() });
     bottomLeftCorner->setZOrder(2);
     bottomLeftCorner->setID("bottom-left-corner");
 
-    // BOTTOM-RIGHT //
     auto bottomRightCorner = CREATE_CORNER();
     bottomRightCorner->setFlipX(true);
     bottomRightCorner->setFlipY(true);
-    bottomRightCorner->setPosition({
-        rightSide->getPositionX(), bottomSide->getPositionY()
-    });
+    bottomRightCorner->setPosition({ rightSide->getPositionX(), bottomSide->getPositionY() });
     bottomRightCorner->setZOrder(2);
     bottomRightCorner->setID("bottom-right-corner");
 
@@ -498,15 +435,12 @@ void LobbyLayer::onDisconnect(CCObject* sender) {
         "Disconnect",
         "Are you sure you want to <cr>disconnect</c> from the <cy>lobby</c> and <cy>server</c>?",
         "Cancel", "Yes",
-        [this](auto, bool btn2) {
+        [](auto, bool btn2) {
             if (!btn2) return;
-
             auto& nm = NetworkManager::get();
             nm.showDisconnectPopup = false;
-
             auto& lm = SwapManager::get();
             lm.disconnectLobby();
-
             cr::utils::popScene();
         }
     );
@@ -517,9 +451,8 @@ void LobbyLayer::keyBackClicked() {
         "Leave Layer?",
         "Are you sure you want to <cy>leave the layer?</c> This will not disconnect you and will allow you to do other things ingame. You will be booted to the level page when the swap begins.",
         "No", "Yes",
-        [this](auto, bool btn2) {
+        [](auto, bool btn2) {
             if (!btn2) return;
-
             cr::utils::popScene();
         }
     );
