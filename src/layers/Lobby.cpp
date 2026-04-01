@@ -323,7 +323,6 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
     if (!playerList && !isFirstRefresh) return;
     if (playerList) playerList->removeFromParent();
 
-    // === Построение списка игроков === //
     playerListItems = CCArray::create();
     for (auto& acc : info.accounts) {  
         auto cell = PlayerCell::create(acc, listWidth, isOwner);
