@@ -30,7 +30,6 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
         CELL_HEIGHT
     });
 
-    // === Иконка игрока === //
     auto player = SimplePlayer::create(0);
     auto gm = GameManager::get();
 
@@ -58,23 +57,17 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
     auto nameBtn = CCMenuItemExt::createSpriteExtra(
         nameLabel,
         [this](CCObject*) {
-            // Открываем профиль игрока в GD
-            // Примечание: ProfilePage::create() ожидает accountID.
-            // Если профиль открывается неправильно, проверь структуру Account
-            // в types/lobby.hpp — возможно нужно использовать account.accountID
             ProfilePage::create(m_account.accountID, false)->show();
         }
     );
     nameBtn->setAnchorPoint({ 0.f, 0.5f });
     nameBtn->setPosition({ 45.f, CELL_HEIGHT / 2.f });
 
-    // === Общее меню ячейки === //
     auto cellMenu = CCMenu::create();
     cellMenu->setPosition({ 0.f, 0.f });
     cellMenu->setContentSize({ width, CELL_HEIGHT });
     cellMenu->addChild(nameBtn);
 
-    // === Кнопка кика === //
     if (canKick && account.userID != GameManager::get()->m_playerUserID.value()) {
         auto kickSpr = CCSprite::createWithSpriteFrameName("accountBtn_removeFriend_001.png");
         kickSpr->setScale(0.725f);
@@ -320,7 +313,6 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
         mainLayer->addChild(menu);
     }
 
-    // ✅ Безопасная проверка перед использованием
     if (titleLabel) titleLabel->setString(
         fmt::format("{} ({})",
             info.settings.name,
@@ -328,26 +320,23 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
         ).c_str()
     );
 
-    // ✅ Теперь playerList = nullptr при первом вызове (благодаря инициализации в .hpp)
-    // Поэтому эта проверка работает корректно
     if (!playerList && !isFirstRefresh) return;
     if (playerList) playerList->removeFromParent();
 
     // === Построение списка игроков === //
     playerListItems = CCArray::create();
-    for (auto& acc : info.accounts) {  // ✅ & чтобы не копировать
+    for (auto& acc : info.accounts) {  
         auto cell = PlayerCell::create(acc, listWidth, isOwner);
-        if (cell) playerListItems->addObject(cell);  // ✅ null-check
+        if (cell) playerListItems->addObject(cell);  
     }
 
-    // ✅ Защита от пустого списка
     if (playerListItems->count() == 0) {
         playerList = nullptr;
         return;
     }
 
     playerList = ListView::create(playerListItems, PlayerCell::CELL_HEIGHT, listWidth);
-    if (!playerList) return;  // ✅ защита
+    if (!playerList) return;  
 
     playerList->setPosition({ size.width / 2, size.height / 2 - 10.f });
     playerList->setAnchorPoint({ 0.5f, 0.5f });
@@ -370,7 +359,6 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
         mainLayer->addChild(listBG);
     }
 
-    // ✅ Безопасные проверки
     if (settingsBtn) settingsBtn->setVisible(isOwner);
     if (startBtn) startBtn->setVisible(isOwner);
 }
