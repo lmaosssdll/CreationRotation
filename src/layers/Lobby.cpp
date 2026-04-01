@@ -62,7 +62,7 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
             // Примечание: ProfilePage::create() ожидает accountID.
             // Если профиль открывается неправильно, проверь структуру Account
             // в types/lobby.hpp — возможно нужно использовать account.accountID
-            ProfilePage::create(m_account.userID, false)->show();
+            ProfilePage::create(m_account.accountID, false)->show();
         }
     );
     nameBtn->setAnchorPoint({ 0.f, 0.5f });
