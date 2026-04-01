@@ -24,6 +24,7 @@ protected:
     bool isOwner = false;
     std::string lobbyNspace;
     std::shared_ptr<bool> m_alive;
+    std::vector<int> m_currentPlayers;
 
     CCMenuItemSpriteExtra* closeBtn = nullptr;         
     CCSprite* background = nullptr;                    
