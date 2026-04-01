@@ -6,10 +6,9 @@ enum LobbySettingType {
     MinsPerTurn,
     Password,
     IsPublic,
-    Tag // Добавили новый тип настройки
+    Tag 
 };
 
-// Список всех доступных тегов
 static const std::vector<std::string> TAG_NAMES = {
     "None", "Short", "Medium", "Long", "Layout", "Deco", "Impossible", "Triggers"
 };
