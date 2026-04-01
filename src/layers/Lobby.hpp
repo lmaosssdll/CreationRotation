@@ -1,3 +1,5 @@
+#pragma once
+
 #include <Geode/Geode.hpp>
 #include <types/lobby.hpp>
 
@@ -7,7 +9,7 @@ using namespace geode::prelude;
 
 class CR_DLL PlayerCell : public CCLayer {
 protected:
-    Account m_account;
+    Account m_account{};  // ✅ value-initialize
 
     bool init(Account account, float width, bool canKick);
     void onKickUser(CCObject*);
@@ -23,19 +25,19 @@ protected:
 
     std::string lobbyNspace;
 
-    CCMenuItemSpriteExtra* closeBtn;
-    CCSprite* background;
+    CCMenuItemSpriteExtra* closeBtn = nullptr;         // ✅
+    CCSprite* background = nullptr;                    // ✅
 
-    CCArray* playerListItems;
-    CustomListView* playerList;
+    CCArray* playerListItems = nullptr;                // ✅
+    CustomListView* playerList = nullptr;              // ✅ ГЛАВНЫЙ ВИНОВНИК КРАША
 
-    CCLabelBMFont* titleLabel;
+    CCLabelBMFont* titleLabel = nullptr;               // ✅
 
-    CCMenuItemSpriteExtra* settingsBtn;
-    CCMenuItemSpriteExtra* startBtn;
+    CCMenuItemSpriteExtra* settingsBtn = nullptr;      // ✅
+    CCMenuItemSpriteExtra* startBtn = nullptr;         // ✅
 
-    LoadingCircle* loadingCircle;
-    CCNode* mainLayer;
+    LoadingCircle* loadingCircle = nullptr;             // ✅
+    CCNode* mainLayer = nullptr;                        // ✅
 
     bool init(std::string code);
     void keyBackClicked();
@@ -54,4 +56,3 @@ protected:
 public:
     static LobbyLayer* create(std::string code);
 };
-
