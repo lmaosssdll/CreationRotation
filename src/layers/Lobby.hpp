@@ -9,7 +9,7 @@ using namespace geode::prelude;
 
 class CR_DLL PlayerCell : public CCLayer {
 protected:
-    Account m_account{};  // ✅ value-initialize
+    Account m_account{};  
 
     bool init(Account account, float width, bool canKick);
     void onKickUser(CCObject*);
@@ -25,19 +25,19 @@ protected:
 
     std::string lobbyNspace;
 
-    CCMenuItemSpriteExtra* closeBtn = nullptr;         // ✅
-    CCSprite* background = nullptr;                    // ✅
+    CCMenuItemSpriteExtra* closeBtn = nullptr;         
+    CCSprite* background = nullptr;                    
 
-    CCArray* playerListItems = nullptr;                // ✅
-    CustomListView* playerList = nullptr;              // ✅ ГЛАВНЫЙ ВИНОВНИК КРАША
+    CCArray* playerListItems = nullptr;                
+    CustomListView* playerList = nullptr;             
 
-    CCLabelBMFont* titleLabel = nullptr;               // ✅
+    CCLabelBMFont* titleLabel = nullptr;               
 
-    CCMenuItemSpriteExtra* settingsBtn = nullptr;      // ✅
-    CCMenuItemSpriteExtra* startBtn = nullptr;         // ✅
+    CCMenuItemSpriteExtra* settingsBtn = nullptr;     
+    CCMenuItemSpriteExtra* startBtn = nullptr;         
 
-    LoadingCircle* loadingCircle = nullptr;             // ✅
-    CCNode* mainLayer = nullptr;                        // ✅
+    LoadingCircle* loadingCircle = nullptr;            
+    CCNode* mainLayer = nullptr;                     
 
     bool init(std::string code);
     void keyBackClicked();
