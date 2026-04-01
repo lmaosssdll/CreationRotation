@@ -7,6 +7,8 @@
 #include "ChatPanel.hpp"
 #include <cvolton.level-id-api/include/EditorIDs.hpp>
 
+// ==================== PlayerCell ==================== //
+
 PlayerCell* PlayerCell::create(Account account, float width, bool canKick) {
     auto ret = new PlayerCell;
     if (ret->init(account, width, canKick)) {
@@ -86,6 +88,8 @@ void PlayerCell::onKickUser(CCObject* sender) {
         }
     );
 }
+
+// ==================== LobbyLayer ==================== //
 
 LobbyLayer* LobbyLayer::create(std::string code) {
     auto ret = new LobbyLayer();
@@ -266,22 +270,70 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
 
     if (!mainLayer) return;
 
+    // --- Логика Уведомлений Входа/Выхода ---
+    if (isFirstRefresh) {
+        m_currentPlayers.clear();
+        for (auto& acc : info.accounts) {
+            m_currentPlayers.push_back(acc.userID);
+        }
+    } else {
+        std::vector<int> newPlayers;
+        for (auto& acc : info.accounts) newPlayers.push_back(acc.userID);
+
+        for (auto& acc : info.accounts) {
+            if (std::find(m_currentPlayers.begin(), m_currentPlayers.end(), acc.userID) == m_currentPlayers.end()) {
+                Notification::create(
+                    fmt::format("<cg>{} joined</c>", acc.name), 
+                    CCSprite::createWithSpriteFrameName("GJ_sStarsIcon_001.png")
+                )->show();
+            }
+        }
+        for (int id : m_currentPlayers) {
+            if (std::find(newPlayers.begin(), newPlayers.end(), id) == newPlayers.end()) {
+                Notification::create(
+                    "<cr>Someone left</c>", 
+                    CCSprite::createWithSpriteFrameName("GJ_deleteIcon_001.png")
+                )->show();
+            }
+        }
+        m_currentPlayers = newPlayers;
+    }
+
+    // --- Заголовок и Кнопка Информации ---
     if (isFirstRefresh) {
         titleLabel = CCLabelBMFont::create(info.settings.name.c_str(), "bigFont.fnt");
         titleLabel->limitLabelWidth(275.f, 1.f, 0.1f);
 
+        auto titleBtn = CCMenuItemExt::createSpriteExtra(
+            titleLabel,
+            [info](CCObject* sender) {
+                geode::utils::clipboard::write(info.code);
+                Notification::create("Copied code to clipboard")->show();
+            }
+        );
+
+        auto infoBtnSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png");
+        infoBtnSpr->setScale(0.8f);
+        auto infoBtn = CCMenuItemExt::createSpriteExtra(
+            infoBtnSpr,
+            [info](CCObject*) {
+                // Если в будущем добавишь теги в настройки, замени "Default" на info.settings.tags
+                std::string settingsText = fmt::format(
+                    "<cy>Turns:</c> {}\n<cy>Minutes per turn:</c> {}\n<cg>Tags:</c> {}",
+                    info.settings.turns,
+                    info.settings.minutesPerTurn,
+                    "Default" 
+                );
+                FLAlertLayer::create("Lobby Info", settingsText, "OK")->show();
+            }
+        );
+
         auto menu = CCMenu::create();
         menu->setPosition({ size.width / 2, size.height - 25 });
-
-        menu->addChild(
-            CCMenuItemExt::createSpriteExtra(
-                titleLabel,
-                [info](CCObject* sender) {
-                    geode::utils::clipboard::write(info.code);
-                    Notification::create("Copied code to clipboard")->show();
-                }
-            )
-        );
+        menu->addChild(titleBtn);
+        menu->addChild(infoBtn);
+        menu->setLayout(RowLayout::create()->setGap(10.f));
+        menu->updateLayout();
 
         mainLayer->addChild(menu);
     }
