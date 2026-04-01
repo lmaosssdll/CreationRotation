@@ -13,12 +13,17 @@ ChatPanel* ChatPanel::create() {
 }
 
 void ChatPanel::initialize() {
-    // initialize the listeners n' stuff if they havent already
     if (!hasInitialized) {
         auto& nm = NetworkManager::get();
         nm.on<MessageSentPacket>([](MessageSentPacket packet) {
             messages.push_back(packet.message);
-            messagesQueue.push_back(std::move(packet.message));
+            messagesQueue.push_back(packet.message);
+            
+            // Уведомление о новом сообщении
+            Notification::create(
+                fmt::format("{} sent a message", packet.message.author.name),
+                CCSprite::createWithSpriteFrameName("GJ_chatBtn_001.png")
+            )->show();
         });
 
         hasInitialized = true;
@@ -31,7 +36,6 @@ bool ChatPanel::init() {
     }
 
     this->setTitle("Chat");
-
     ChatPanel::initialize();
 
     auto scrollContainer = CCScale9Sprite::create("square02b_001.png");
@@ -44,7 +48,6 @@ bool ChatPanel::init() {
 
     scrollLayer = ScrollLayer::create(scrollContainer->getContentSize() - 10.f);
     scrollLayer->ignoreAnchorPointForPosition(false);
-    // stolen from https://github.com/HJfod/LevelTrashcan/blob/main/src/TrashcanPopup.cpp#L41
     scrollLayer->m_contentLayer->setLayout(
         ColumnLayout::create()
             ->setAxisReverse(true)
@@ -53,19 +56,16 @@ bool ChatPanel::init() {
             ->setGap(0)
     );
     scrollContainer->addChildAtPosition(scrollLayer, Anchor::Center);
-
     m_mainLayer->addChildAtPosition(scrollContainer, Anchor::Center, ccp(0, 5.f));
 
     auto inputContainer = CCNode::create();
-    inputContainer->setContentSize({
-        scrollContainer->getContentWidth(),
-        75.f
-    });
-    inputContainer->setAnchorPoint({
-        0.5f, 0.f
-    });
+    inputContainer->setContentSize({ scrollContainer->getContentWidth(), 75.f });
+    inputContainer->setAnchorPoint({ 0.5f, 0.f });
 
     messageInput = TextInput::create(inputContainer->getContentWidth(), "Send a message to the lobby!", "chatFont.fnt");
+    
+    // --- ИСПРАВЛЕНИЕ: Разрешаем любые символы (кириллицу, спецсимволы) ---
+    messageInput->setCommonFilter(CommonFilter::Any);
 
     auto sendMsgBtn = CCMenuItemExt::createSpriteExtraWithFrameName(
         "GJ_chatBtn_001.png",
@@ -82,10 +82,7 @@ bool ChatPanel::init() {
 
     inputContainer->addChild(messageInput);
     inputContainer->addChild(msgBtnMenu);
-
-    inputContainer->setLayout(
-        RowLayout::create()
-    );
+    inputContainer->setLayout(RowLayout::create());
     m_mainLayer->addChildAtPosition(inputContainer, Anchor::Bottom, ccp(0, 10.f));
 
     for (auto message : ChatPanel::messages) {
@@ -101,12 +98,7 @@ void ChatPanel::renderMessage(Message const& message) {
     auto msgNode = CCNode::create();
     auto msgText = TextArea::create(
         fmt::format("<cy>{}</c>: {}", message.author.name, message.message),
-        "chatFont.fnt",
-        0.5f,
-        scrollLayer->getContentWidth(),
-        {0.f, 0.f},
-        17.f,
-        false
+        "chatFont.fnt", 0.5f, scrollLayer->getContentWidth(), {0.f, 0.f}, 17.f, false
     );
     msgText->setAnchorPoint({ 0.f, 0.f });
     msgNode->setContentHeight(msgText->m_label->m_lines->count() * 17.f);
@@ -114,9 +106,7 @@ void ChatPanel::renderMessage(Message const& message) {
     msgText->setPosition({ 0.f, 0.f });
     msgNode->addChild(msgText);
 
-    scrollLayer->m_contentLayer->addChild(
-        msgNode
-    );
+    scrollLayer->m_contentLayer->addChild(msgNode);
     scrollLayer->m_contentLayer->updateLayout();
 }
 
@@ -129,7 +119,6 @@ void ChatPanel::updateMessages(float dt) {
 
 void ChatPanel::clearMessages() {
     messages.clear();
-
     auto& nm = NetworkManager::get();
     nm.unbind<MessageSentPacket>();
     hasInitialized = false;
@@ -148,7 +137,6 @@ void ChatPanel::sendMessage() {
 
 void ChatPanel::keyDown(cocos2d::enumKeyCodes keycode, double timestamp) {
     if (keycode == cocos2d::KEY_Enter && CCIMEDispatcher::sharedDispatcher()->hasDelegate()) {
-        log::debug("sending via keybind");
         sendMessage();
     } else {
         Popup::keyDown(keycode, timestamp);
