@@ -31,6 +31,7 @@ struct LobbySettings {
     // std::string password;
     int turns;
     int minutesPerTurn;
+    int tag = 0;
 
     Account owner;
     bool isPublic;
