@@ -7,8 +7,6 @@
 #include "ChatPanel.hpp"
 #include <cvolton.level-id-api/include/EditorIDs.hpp>
 
-// ==================== PlayerCell ==================== //
-
 PlayerCell* PlayerCell::create(Account account, float width, bool canKick) {
     auto ret = new PlayerCell;
     if (ret->init(account, width, canKick)) {
@@ -89,8 +87,6 @@ void PlayerCell::onKickUser(CCObject* sender) {
     );
 }
 
-// ==================== LobbyLayer ==================== //
-
 LobbyLayer* LobbyLayer::create(std::string code) {
     auto ret = new LobbyLayer();
     if (ret->init(code)) {
@@ -160,10 +156,7 @@ bool LobbyLayer::init(std::string code) {
 
     auto msgButtonSpr = CCSprite::create("messagesBtn.png"_spr);
     auto msgButton = CCMenuItemExt::createSpriteExtra(
-        msgButtonSpr,
-        [](CCObject*) {
-            ChatPanel::create()->show();
-        }
+        msgButtonSpr, [](CCObject*) { ChatPanel::create()->show(); }
     );
 
     auto settingsBtnSpr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn02_001.png");
@@ -172,8 +165,7 @@ bool LobbyLayer::init(std::string code) {
     );
 
     auto refreshBtn = CCMenuItemExt::createSpriteExtraWithFrameName(
-        "GJ_getSongInfoBtn_001.png",
-        1.f,
+        "GJ_getSongInfoBtn_001.png", 1.f,
         [this, alive = m_alive](CCObject* sender) {
             SwapManager::get().getLobbyInfo([this, alive](LobbyInfo info) {
                 if (!*alive) return;
@@ -198,7 +190,7 @@ bool LobbyLayer::init(std::string code) {
         [](CCObject* target) {
             geode::createQuickPopup(
                 "Discord Server",
-                "We have a <cb>Discord Server</c>! If you have questions, want to suggest a feature, or find someone to swap with, join here! \n<cl>Please not that you need to be at least 13 years of age to join our server.</c>",
+                "We have a <cb>Discord Server</c>! If you have questions, want to suggest a feature, or find someone to swap with, join here!",
                 "Cancel", "Join!",
                 [](auto, bool btn2) {
                     if (!btn2) return;
@@ -264,7 +256,6 @@ LobbyLayer::~LobbyLayer() {
 
 void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
     isOwner = GameManager::get()->m_playerUserID == info.settings.owner.userID;
-
     auto size = CCDirector::sharedDirector()->getWinSize();
     auto listWidth = size.width / 1.5f;
 
@@ -273,33 +264,79 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
     // --- Логика Уведомлений Входа/Выхода ---
     if (isFirstRefresh) {
         m_currentPlayers.clear();
-        for (auto& acc : info.accounts) {
-            m_currentPlayers.push_back(acc.userID);
-        }
+        for (auto& acc : info.accounts) m_currentPlayers.push_back(acc.userID);
     } else {
         std::vector<int> newPlayers;
         for (auto& acc : info.accounts) newPlayers.push_back(acc.userID);
 
         for (auto& acc : info.accounts) {
             if (std::find(m_currentPlayers.begin(), m_currentPlayers.end(), acc.userID) == m_currentPlayers.end()) {
-                Notification::create(
-                    fmt::format("<cg>{} joined</c>", acc.name), 
-                    CCSprite::createWithSpriteFrameName("GJ_sStarsIcon_001.png")
-                )->show();
+                Notification::create(fmt::format("<cg>{} joined</c>", acc.name), CCSprite::createWithSpriteFrameName("GJ_sStarsIcon_001.png"))->show();
             }
         }
         for (int id : m_currentPlayers) {
             if (std::find(newPlayers.begin(), newPlayers.end(), id) == newPlayers.end()) {
-                Notification::create(
-                    "<cr>Someone left</c>", 
-                    CCSprite::createWithSpriteFrameName("GJ_deleteIcon_001.png")
-                )->show();
+                Notification::create("<cr>Someone left</c>", CCSprite::createWithSpriteFrameName("GJ_deleteIcon_001.png"))->show();
             }
         }
         m_currentPlayers = newPlayers;
     }
 
-    // --- Заголовок и Кнопка Информации ---
+    // --- Обновление визуальных настроек лобби (СЛЕВА СВЕРХУ) ---
+    // Удаляем старый UI настроек, если он есть
+    if (auto oldSettingsUI = mainLayer->getChildByID("lobby-settings-display")) {
+        oldSettingsUI->removeFromParent();
+    }
+
+    // Создаем новый контейнер для настроек
+    auto settingsDisplay = CCNode::create();
+    settingsDisplay->setID("lobby-settings-display");
+
+    // Текст: Ходы и время
+    auto statsLabel = CCLabelBMFont::create(
+        fmt::format("Turns: {} | Mins/Turn: {}", info.settings.turns, info.settings.minutesPerTurn).c_str(),
+        "chatFont.fnt"
+    );
+    statsLabel->setAnchorPoint({ 0.f, 1.f });
+
+    // Текст: Выбранный тег с цветом
+    std::string tagNames[] = {"None", "Short", "Medium", "Long", "Layout", "Deco", "Impossible", "Triggers"};
+    ccColor3B tagColors[] = {
+        {255, 255, 255}, // 0 None (Белый)
+        {100, 255, 100}, // 1 Short (Светло-зеленый)
+        {255, 255, 100}, // 2 Medium (Желтый)
+        {255, 150, 50},  // 3 Long (Оранжевый)
+        {100, 255, 255}, // 4 Layout (Бирюзовый)
+        {255, 100, 255}, // 5 Deco (Розовый/Пурпурный)
+        {255, 50, 50},   // 6 Impossible (Красный)
+        {200, 100, 255}  // 7 Triggers (Фиолетовый)
+    };
+    
+    int tagId = info.settings.tag;
+    if (tagId < 0 || tagId >= 8) tagId = 0;
+
+    auto tagPrefix = CCLabelBMFont::create("Tag: ", "chatFont.fnt");
+    auto tagValue = CCLabelBMFont::create(tagNames[tagId].c_str(), "chatFont.fnt");
+    tagValue->setColor(tagColors[tagId]);
+
+    auto tagContainer = CCMenu::create(); // Используем меню просто как Layout контейнер
+    tagContainer->addChild(tagPrefix);
+    tagContainer->addChild(tagValue);
+    tagContainer->setLayout(RowLayout::create()->setGap(2.f)->setAxisAlignment(AxisAlignment::Start));
+    tagContainer->setAnchorPoint({ 0.f, 1.f });
+    tagContainer->setContentSize({ 200.f, tagPrefix->getContentHeight() });
+
+    settingsDisplay->addChild(statsLabel);
+    settingsDisplay->addChild(tagContainer);
+    settingsDisplay->setLayout(ColumnLayout::create()->setGap(5.f)->setAxisReverse(true)->setAxisAlignment(AxisAlignment::Start));
+    settingsDisplay->setContentSize({ 200.f, 50.f });
+    settingsDisplay->setPosition({ 15.f, size.height - 15.f });
+    settingsDisplay->setAnchorPoint({ 0.f, 1.f });
+
+    mainLayer->addChild(settingsDisplay);
+    // -----------------------------------------------------------
+
+    // Заголовок (только при первом заходе)
     if (isFirstRefresh) {
         titleLabel = CCLabelBMFont::create(info.settings.name.c_str(), "bigFont.fnt");
         titleLabel->limitLabelWidth(275.f, 1.f, 0.1f);
@@ -312,37 +349,14 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
             }
         );
 
-        auto infoBtnSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png");
-        infoBtnSpr->setScale(0.8f);
-        auto infoBtn = CCMenuItemExt::createSpriteExtra(
-            infoBtnSpr,
-            [info](CCObject*) {
-                // Если в будущем добавишь теги в настройки, замени "Default" на info.settings.tags
-                std::string settingsText = fmt::format(
-                    "<cy>Turns:</c> {}\n<cy>Minutes per turn:</c> {}\n<cg>Tags:</c> {}",
-                    info.settings.turns,
-                    info.settings.minutesPerTurn,
-                    "Default" 
-                );
-                FLAlertLayer::create("Lobby Info", settingsText, "OK")->show();
-            }
-        );
-
         auto menu = CCMenu::create();
         menu->setPosition({ size.width / 2, size.height - 25 });
         menu->addChild(titleBtn);
-        menu->addChild(infoBtn);
-        menu->setLayout(RowLayout::create()->setGap(10.f));
-        menu->updateLayout();
-
         mainLayer->addChild(menu);
     }
 
     if (titleLabel) titleLabel->setString(
-        fmt::format("{} ({})",
-            info.settings.name,
-            Mod::get()->getSettingValue<bool>("hide-code") ? "......" : info.code
-        ).c_str()
+        fmt::format("{} ({})", info.settings.name, Mod::get()->getSettingValue<bool>("hide-code") ? "......" : info.code).c_str()
     );
 
     if (!playerList && !isFirstRefresh) return;
