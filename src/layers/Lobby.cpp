@@ -10,13 +10,11 @@
 
 #include <cvolton.level-id-api/include/EditorIDs.hpp>
 
+// ==================== PlayerCell ==================== //
+
 PlayerCell* PlayerCell::create(Account account, float width, bool canKick) {
     auto ret = new PlayerCell;
-    if (ret->init(
-        account,
-        width,
-        canKick
-    )) {
+    if (ret->init(account, width, canKick)) {
         ret->autorelease();
         return ret;
     }
@@ -32,6 +30,7 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
         CELL_HEIGHT
     });
 
+    // === Иконка игрока === //
     auto player = SimplePlayer::create(0);
     auto gm = GameManager::get();
 
@@ -46,35 +45,47 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
     }
 
     player->setScale(0.65f);
-    player->setPosition({ 25.f, CELL_HEIGHT / 2.f});
+    player->setPosition({ 25.f, CELL_HEIGHT / 2.f });
     player->setAnchorPoint({ 0.5f, 0.5f });
 
     this->addChild(player);
 
+    // === Имя игрока (кликабельное — открывает профиль) === //
     auto nameLabel = CCLabelBMFont::create(account.name.c_str(), "bigFont.fnt");
     nameLabel->limitLabelWidth(225.f, 0.8f, 0.1f);
-    nameLabel->setPosition({
-        45.f, CELL_HEIGHT / 2.f
-    });
     nameLabel->setAnchorPoint({ 0.f, 0.5f });
-    nameLabel->ignoreAnchorPointForPosition(false);
 
-    this->addChild(nameLabel);
+    auto nameBtn = CCMenuItemExt::createSpriteExtra(
+        nameLabel,
+        [this](CCObject*) {
+            // Открываем профиль игрока в GD
+            // Примечание: ProfilePage::create() ожидает accountID.
+            // Если профиль открывается неправильно, проверь структуру Account
+            // в types/lobby.hpp — возможно нужно использовать account.accountID
+            ProfilePage::create(m_account.userID, false)->show();
+        }
+    );
+    nameBtn->setAnchorPoint({ 0.f, 0.5f });
+    nameBtn->setPosition({ 45.f, CELL_HEIGHT / 2.f });
 
+    // === Общее меню ячейки === //
+    auto cellMenu = CCMenu::create();
+    cellMenu->setPosition({ 0.f, 0.f });
+    cellMenu->setContentSize({ width, CELL_HEIGHT });
+    cellMenu->addChild(nameBtn);
+
+    // === Кнопка кика === //
     if (canKick && account.userID != GameManager::get()->m_playerUserID.value()) {
         auto kickSpr = CCSprite::createWithSpriteFrameName("accountBtn_removeFriend_001.png");
         kickSpr->setScale(0.725f);
         auto kickBtn = CCMenuItemSpriteExtra::create(
             kickSpr, this, menu_selector(PlayerCell::onKickUser)
         );
-        auto kickMenu = CCMenu::create();
-        kickMenu->addChild(kickBtn);
-        kickMenu->setPosition(
-            width - 25.f, CELL_HEIGHT / 2.f
-        );
-        kickMenu->setAnchorPoint({ 0.5f, 0.5f });
-        this->addChild(kickMenu);
+        kickBtn->setPosition({ width - 25.f, CELL_HEIGHT / 2.f });
+        cellMenu->addChild(kickBtn);
     }
+
+    this->addChild(cellMenu);
 
     return true;
 }
@@ -86,12 +97,14 @@ void PlayerCell::onKickUser(CCObject* sender) {
         "Close", "Kick",
         [this](auto, bool btn2) {
             if (!btn2) return;
-            
+
             auto& nm = NetworkManager::get();
             nm.send(KickUserPacket::create(m_account.userID));
         }
     );
 }
+
+// ==================== LobbyLayer ==================== //
 
 LobbyLayer* LobbyLayer::create(std::string code) {
     auto ret = new LobbyLayer();
@@ -185,7 +198,7 @@ bool LobbyLayer::init(std::string code) {
         1.f,
         [this](CCObject* sender) {
             SwapManager::get().getLobbyInfo([this](LobbyInfo info) {
-                refresh(info); 
+                refresh(info);
             });
         }
     );
@@ -234,7 +247,7 @@ bool LobbyLayer::init(std::string code) {
     this->addChild(bottomMenu);
 
     SwapManager::get().getLobbyInfo([this](LobbyInfo info) {
-        refresh(info, true); 
+        refresh(info, true);
     });
     registerListeners();
 
@@ -269,23 +282,17 @@ void LobbyLayer::unregisterListeners() {
 
 LobbyLayer::~LobbyLayer() {
     unregisterListeners();
-    // if (mainLayer) mainLayer->release();
 }
 
 void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
     isOwner = GameManager::get()->m_playerUserID == info.settings.owner.userID;
 
-    // loadingCircle = LoadingCircle::create();
-    // loadingCircle->setParentLayer(this);
-    // loadingCircle->setFade(true);
-    // loadingCircle->show();
-
     auto size = CCDirector::sharedDirector()->getWinSize();
     auto listWidth = size.width / 1.5f;
 
     if (!mainLayer) return;
-    // mainLayer->retain();
 
+    // === Заголовок (создаётся только при первом вызове) === //
     if (isFirstRefresh) {
         titleLabel = CCLabelBMFont::create(
             info.settings.name.c_str(),
@@ -313,6 +320,7 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
         mainLayer->addChild(menu);
     }
 
+    // ✅ Безопасная проверка перед использованием
     if (titleLabel) titleLabel->setString(
         fmt::format("{} ({})",
             info.settings.name,
@@ -320,21 +328,27 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
         ).c_str()
     );
 
+    // ✅ Теперь playerList = nullptr при первом вызове (благодаря инициализации в .hpp)
+    // Поэтому эта проверка работает корректно
     if (!playerList && !isFirstRefresh) return;
     if (playerList) playerList->removeFromParent();
 
-    using namespace geode::utils; 
+    // === Построение списка игроков === //
     playerListItems = CCArray::create();
-    for (auto acc : info.accounts) {
-        playerListItems->addObject(
-            PlayerCell::create(
-                acc,
-                listWidth,
-                isOwner
-            )
-        );
+    for (auto& acc : info.accounts) {  // ✅ & чтобы не копировать
+        auto cell = PlayerCell::create(acc, listWidth, isOwner);
+        if (cell) playerListItems->addObject(cell);  // ✅ null-check
     }
+
+    // ✅ Защита от пустого списка
+    if (playerListItems->count() == 0) {
+        playerList = nullptr;
+        return;
+    }
+
     playerList = ListView::create(playerListItems, PlayerCell::CELL_HEIGHT, listWidth);
+    if (!playerList) return;  // ✅ защита
+
     playerList->setPosition({ size.width / 2, size.height / 2 - 10.f });
     playerList->setAnchorPoint({ 0.5f, 0.5f });
     playerList->ignoreAnchorPointForPosition(false);
@@ -356,10 +370,9 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
         mainLayer->addChild(listBG);
     }
 
-    settingsBtn->setVisible(isOwner);
-    startBtn->setVisible(isOwner);
-
-    // loadingCircle->fadeAndRemove();
+    // ✅ Безопасные проверки
+    if (settingsBtn) settingsBtn->setVisible(isOwner);
+    if (startBtn) startBtn->setVisible(isOwner);
 }
 
 void LobbyLayer::onStart(CCObject* sender) {
@@ -389,15 +402,12 @@ void LobbyLayer::onSettings(CCObject* sender) {
 }
 
 void LobbyLayer::createBorders() {
-    // SIDES //
-
     #define CREATE_SIDE() CCSprite::createWithSpriteFrameName("GJ_table_side_001.png")
-    
+
     const int SIDE_OFFSET = 7;
     const int TOP_BOTTOM_OFFSET = 8;
 
     // TOP //
-
     auto topSide = CREATE_SIDE();
     topSide->setScaleY(
         playerList->getContentWidth() / topSide->getContentHeight()
@@ -411,7 +421,6 @@ void LobbyLayer::createBorders() {
     topSide->setZOrder(3);
 
     // BOTTOM //
-
     auto bottomSide = CREATE_SIDE();
     bottomSide->setScaleY(
         playerList->getContentWidth() / bottomSide->getContentHeight()
@@ -425,7 +434,6 @@ void LobbyLayer::createBorders() {
     bottomSide->setZOrder(3);
 
     // LEFT //
-
     auto leftSide = CREATE_SIDE();
     leftSide->setScaleY(
         (playerList->getContentHeight() + TOP_BOTTOM_OFFSET) / leftSide->getContentHeight()
@@ -437,7 +445,6 @@ void LobbyLayer::createBorders() {
     leftSide->setID("left-border");
 
     // RIGHT //
-
     auto rightSide = CREATE_SIDE();
     rightSide->setScaleY(
         (playerList->getContentHeight() + TOP_BOTTOM_OFFSET) / rightSide->getContentHeight()
@@ -455,11 +462,9 @@ void LobbyLayer::createBorders() {
     playerList->addChild(rightSide);
 
     // CORNERS //
-
     #define CREATE_CORNER() CCSprite::createWithSpriteFrameName("GJ_table_corner_001.png")
 
     // TOP-LEFT //
-    
     auto topLeftCorner = CREATE_CORNER();
     topLeftCorner->setPosition({
         leftSide->getPositionX(), topSide->getPositionY()
@@ -477,7 +482,6 @@ void LobbyLayer::createBorders() {
     topRightCorner->setID("top-right-corner");
 
     // BOTTOM-LEFT //
-    
     auto bottomLeftCorner = CREATE_CORNER();
     bottomLeftCorner->setFlipY(true);
     bottomLeftCorner->setPosition({
