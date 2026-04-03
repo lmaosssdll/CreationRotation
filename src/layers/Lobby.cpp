@@ -7,6 +7,7 @@
 #include "ChatPanel.hpp"
 #include <cvolton.level-id-api/include/EditorIDs.hpp>
 
+// Factory method to create a player cell
 PlayerCell* PlayerCell::create(Account account, float width, bool canKick) {
     auto ret = new PlayerCell;
     if (ret->init(account, width, canKick)) {
@@ -17,11 +18,13 @@ PlayerCell* PlayerCell::create(Account account, float width, bool canKick) {
     return nullptr;
 }
 
+// Initializes the player cell UI (icon, name, kick button)
 bool PlayerCell::init(Account account, float width, bool canKick) {
     m_account = account;
 
     this->setContentSize({ width, CELL_HEIGHT });
 
+    // Create player icon based on account data
     auto player = SimplePlayer::create(0);
     auto gm = GameManager::get();
 
@@ -29,6 +32,7 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
     player->setColor(gm->colorForIdx(account.color1));
     player->setSecondColor(gm->colorForIdx(account.color2));
 
+    // Disable glow if color3 is not set
     if (account.color3 == -1) {
         player->disableGlowOutline();
     } else {
@@ -41,10 +45,12 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
 
     this->addChild(player);
 
+    // Create player name label
     auto nameLabel = CCLabelBMFont::create(account.name.c_str(), "bigFont.fnt");
     nameLabel->limitLabelWidth(225.f, 0.8f, 0.1f);
     nameLabel->setAnchorPoint({ 0.f, 0.5f });
 
+    // Clicking the name opens their profile
     auto nameBtn = CCMenuItemExt::createSpriteExtra(
         nameLabel,
         [this](CCObject*) {
@@ -59,6 +65,7 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
     cellMenu->setContentSize({ width, CELL_HEIGHT });
     cellMenu->addChild(nameBtn);
 
+    // Add kick button if current user is host and not kicking themselves
     if (canKick && account.userID != GameManager::get()->m_playerUserID.value()) {
         auto kickSpr = CCSprite::createWithSpriteFrameName("accountBtn_removeFriend_001.png");
         kickSpr->setScale(0.725f);
@@ -74,6 +81,7 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
     return true;
 }
 
+// Sends a kick request to the server
 void PlayerCell::onKickUser(CCObject* sender) {
     geode::createQuickPopup(
         "Kick User",
@@ -87,6 +95,7 @@ void PlayerCell::onKickUser(CCObject* sender) {
     );
 }
 
+// Factory method for LobbyLayer
 LobbyLayer* LobbyLayer::create(std::string code) {
     auto ret = new LobbyLayer();
     if (ret->init(code)) {
@@ -97,6 +106,7 @@ LobbyLayer* LobbyLayer::create(std::string code) {
     return nullptr;
 }
 
+// Initializes the lobby layer (background, buttons, UI)
 bool LobbyLayer::init(std::string code) {
     lobbyCode = code;
     m_alive = std::make_shared<bool>(true);
@@ -109,6 +119,7 @@ bool LobbyLayer::init(std::string code) {
     mainLayer = CCNode::create();
     mainLayer->setContentSize(size);
 
+    // Setup background
     background = CCSprite::create("GJ_gradientBG.png");
     background->setScaleX(size.width / background->getContentWidth());
     background->setScaleY(size.height / background->getContentHeight());
@@ -117,6 +128,7 @@ bool LobbyLayer::init(std::string code) {
     background->setZOrder(-10);
     mainLayer->addChild(background);
 
+    // Setup close and disconnect buttons
     auto closeBtnSprite = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png");
     closeBtn = CCMenuItemExt::createSpriteExtra(
         closeBtnSprite, [this](CCObject* target) {
@@ -132,6 +144,7 @@ bool LobbyLayer::init(std::string code) {
             onDisconnect(target);
         }
     );
+    
     auto closeMenu = CCMenu::create();
     closeMenu->addChild(closeBtn);
     closeMenu->addChild(disconnectBtn);
@@ -142,18 +155,20 @@ bool LobbyLayer::init(std::string code) {
     geode::addSideArt(mainLayer, SideArt::Bottom);
     geode::addSideArt(mainLayer, SideArt::TopRight);
 
+    // Setup start button
     auto startBtnSpr = CCSprite::create("swap-btn.png"_spr);
     startBtnSpr->setScale(0.3f);
     startBtn = CCMenuItemSpriteExtra::create(
         startBtnSpr, this, menu_selector(LobbyLayer::onStart)
     );
+    
     auto startMenu = CCMenu::create();
     startMenu->setZOrder(5);
     startMenu->addChild(startBtn);
     startMenu->setPosition({ size.width / 2, 30.f });
-
     mainLayer->addChild(startMenu);
 
+    // Setup chat, settings and refresh buttons
     auto msgButtonSpr = CCSprite::create("messagesBtn.png"_spr);
     auto msgButton = CCMenuItemExt::createSpriteExtra(
         msgButtonSpr, [](CCObject*) { ChatPanel::create()->show(); }
@@ -183,6 +198,7 @@ bool LobbyLayer::init(std::string code) {
     bottomMenu->setPosition(size.width - 25.f, bottomMenu->getChildrenCount() * 25.f);
     bottomMenu->setLayout(ColumnLayout::create()->setAxisReverse(true));
 
+    // Setup Discord button
     auto discordSpr = CCSprite::createWithSpriteFrameName("gj_discordIcon_001.png");
     discordSpr->setScale(1.25f);
     auto discordBtn = CCMenuItemExt::createSpriteExtra(
@@ -199,6 +215,7 @@ bool LobbyLayer::init(std::string code) {
             );
         }
     );
+    
     auto discordMenu = CCMenu::create();
     discordMenu->setPosition({ 25.f, 25.f });
     discordMenu->addChild(discordBtn);
@@ -209,26 +226,32 @@ bool LobbyLayer::init(std::string code) {
     this->addChild(mainLayer);
     this->addChild(bottomMenu);
 
+    // Load initial lobby info
     SwapManager::get().getLobbyInfo([this, alive = m_alive](LobbyInfo info) {
         if (!*alive) return;
         refresh(info, true);
     });
+    
     registerListeners();
 
     return true;
 }
 
+// Binds network packet listeners
 void LobbyLayer::registerListeners() {
     auto& nm = NetworkManager::get();
+    
     nm.on<LobbyUpdatedPacket>([this, alive = m_alive](LobbyUpdatedPacket packet) {
         if (!*alive) return;
         this->refresh(std::move(packet.info));
     });
+    
     nm.on<SwapStartedPacket>([](SwapStartedPacket packet) {
         auto& sm = SwapManager::get();
         sm.startSwap(std::move(packet));
         NetworkManager::get().unbind<SwapStartedPacket>();
     });
+    
     nm.showDisconnectPopup = true;
     nm.setDisconnectCallback([this, alive = m_alive](std::string reason) {
         if (!*alive) return;
@@ -240,6 +263,7 @@ void LobbyLayer::registerListeners() {
     });
 }
 
+// Unbinds network packet listeners
 void LobbyLayer::unregisterListeners() {
     auto& nm = NetworkManager::get();
     nm.unbind<LobbyUpdatedPacket>();
@@ -247,6 +271,7 @@ void LobbyLayer::unregisterListeners() {
     nm.setDisconnectCallback(nullptr);
 }
 
+// Destructor
 LobbyLayer::~LobbyLayer() {
     if (m_alive) {
         *m_alive = false;
@@ -254,6 +279,7 @@ LobbyLayer::~LobbyLayer() {
     unregisterListeners();
 }
 
+// Updates UI with new lobby data from the server
 void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
     isOwner = GameManager::get()->m_playerUserID == info.settings.owner.userID;
     auto size = CCDirector::sharedDirector()->getWinSize();
@@ -264,7 +290,9 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
     // --- Join/Leave Notifications Logic ---
     if (isFirstRefresh) {
         m_currentPlayers.clear();
-        for (auto& acc : info.accounts) m_currentPlayers.push_back(acc.userID);
+        for (auto& acc : info.accounts) {
+            m_currentPlayers.push_back(acc.userID);
+        }
     } else {
         std::vector<int> newPlayers;
         for (auto& acc : info.accounts) newPlayers.push_back(acc.userID);
@@ -282,9 +310,7 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
         m_currentPlayers = newPlayers;
     }
 
-    // [REMOVED: The visual tags and turns/mins display code that was here previously]
-
-    // Title label (only on first refresh)
+    // Title label (Only create on first refresh)
     if (isFirstRefresh) {
         titleLabel = CCLabelBMFont::create(info.settings.name.c_str(), "bigFont.fnt");
         titleLabel->limitLabelWidth(275.f, 1.f, 0.1f);
@@ -303,10 +329,14 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
         mainLayer->addChild(menu);
     }
 
-    if (titleLabel) titleLabel->setString(
-        fmt::format("{} ({})", info.settings.name, Mod::get()->getSettingValue<bool>("hide-code") ? "......" : info.code).c_str()
-    );
+    // Update title text (Hide code if setting is enabled)
+    if (titleLabel) {
+        titleLabel->setString(
+            fmt::format("{} ({})", info.settings.name, Mod::get()->getSettingValue<bool>("hide-code") ? "......" : info.code).c_str()
+        );
+    }
 
+    // Rebuild the player list
     if (!playerList && !isFirstRefresh) return;
     if (playerList) playerList->removeFromParent();
 
@@ -332,6 +362,7 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
 
     mainLayer->addChild(playerList);
 
+    // Recreate or update list background
     auto listBG = static_cast<CCLayerColor*>(mainLayer->getChildByIDRecursive("list-bg"));
     if (!listBG) {
         listBG = CCLayerColor::create({ 0, 0, 0, 85 });
@@ -344,10 +375,12 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
     listBG->setPosition(playerList->getPosition());
     listBG->setContentSize(playerList->getContentSize());
 
+    // Toggle button visibility based on host status
     if (settingsBtn) settingsBtn->setVisible(isOwner);
     if (startBtn) startBtn->setVisible(isOwner);
 }
 
+// Triggered when host clicks start
 void LobbyLayer::onStart(CCObject* sender) {
     if (!isOwner) return;
 
@@ -363,6 +396,7 @@ void LobbyLayer::onStart(CCObject* sender) {
     );
 }
 
+// Triggered when host clicks settings
 void LobbyLayer::onSettings(CCObject* sender) {
     auto& lm = SwapManager::get();
     lm.getLobbyInfo([this, alive = m_alive](LobbyInfo info) {
@@ -376,6 +410,7 @@ void LobbyLayer::onSettings(CCObject* sender) {
     });
 }
 
+// Draws borders and corners around the player list
 void LobbyLayer::createBorders() {
     #define CREATE_SIDE() CCSprite::createWithSpriteFrameName("GJ_table_side_001.png")
 
@@ -444,6 +479,7 @@ void LobbyLayer::createBorders() {
     playerList->addChild(bottomRightCorner);
 }
 
+// Disconnects from the server and lobby completely
 void LobbyLayer::onDisconnect(CCObject* sender) {
     geode::createQuickPopup(
         "Disconnect",
@@ -460,6 +496,7 @@ void LobbyLayer::onDisconnect(CCObject* sender) {
     );
 }
 
+// Called when player clicks the back arrow (Leaves menu, keeps connection alive)
 void LobbyLayer::keyBackClicked() {
     geode::createQuickPopup(
         "Leave Layer?",
