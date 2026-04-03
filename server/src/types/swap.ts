@@ -75,54 +75,82 @@ export class Swap {
         this.currentlySwapping = true
         this.isSwapEnding = ending
         this.closeReason = reason
-        log.debug(this.swapOrder)
+        log.debug(`[Swap] Turn ${this.currentTurn}/${this.totalTurns} started for lobby ${this.lobbyCode}. Swap order: ${this.swapOrder}`)
         emitToLobby(this.serverState, this.lobbyCode, Packet.TimeToSwapPacket, {})
     }
 
     addLevel(level: LevelData, accId: number) {
+        if (!this.currentlySwapping) {
+            log.warn(`[Swap] Received late or duplicate level from ${accId} when not swapping. Ignoring.`)
+            return
+        }
+
         const idx = this.swapOrder.indexOf(accId)
-        this.levels.push(
-            {
-                accountID: parseInt(offsetArray(this.swapOrder, 1)[idx]),
-                level
-            }
-        )
+        if (idx === -1) {
+            log.error(`[Swap] Player ${accId} is not in the swapOrder list!`)
+            return
+        }
+
+        const targetAccId = parseInt(offsetArray(this.swapOrder, 1)[idx] as string)
+
+        // FIX: Prevent duplicate submissions messing up the array length.
+        // If they already submitted, overwrite it. Otherwise, add it.
+        const existingIdx = this.levels.findIndex(l => l.accountID === targetAccId)
+        
+        if (existingIdx !== -1) {
+            log.warn(`[Swap] Player ${accId} sent level data AGAIN. Overwriting previous submission.`)
+            this.levels[existingIdx] = { accountID: targetAccId, level }
+        } else {
+            this.levels.push({ accountID: targetAccId, level })
+        }
+
+        log.info(`[Swap] Received level from ${accId} (Size: ${level.levelString.length} bytes). Forwarding to player ${targetAccId}. (${this.levels.length}/${this.swapOrder.length})`)
+
         this.checkSwap()
     }
 
     checkSwap() {
         if (!this.currentlySwapping) return
-        this.lobby.accounts.forEach((acc, index) => {
-            if (this.serverState.lobbies[this.lobbyCode].accounts.findIndex(
-                lobbyAcc => lobbyAcc.accountID === acc.accountID
-            ) !== -1) return
 
-            this.levels.splice(index, 1)
-        })
-        if (getLength(this.levels) < this.lobby.accounts.length) return
+        const currentLobbyAccounts = this.serverState.lobbies[this.lobbyCode].accounts
+
+        // FIX: Instead of checking array length (which breaks on duplicates or disconnects),
+        // we strictly check: Does EVERY player currently in the lobby have a level assigned to them?
+        let allReady = true
+        for (const acc of currentLobbyAccounts) {
+            const hasLevelForThisPlayer = this.levels.some(l => l.accountID === acc.accountID)
+            if (!hasLevelForThisPlayer) {
+                allReady = false
+                break
+            }
+        }
+
+        if (!allReady) {
+            // We are still waiting for someone to finish uploading their level
+            return
+        }
+
+        // Everyone has submitted their level! We can proceed.
         this.currentlySwapping = false
+        log.info(`[Swap] All levels received for lobby ${this.lobbyCode}. Executing swap!`)
+
+        // Clean up: only send levels to players who are actually still in the lobby
+        const validLevels = this.levels.filter(l => 
+            currentLobbyAccounts.some(acc => acc.accountID === l.accountID)
+        )
 
         if (!this.isSwapEnding) {
-            emitToLobby(this.serverState, this.lobbyCode, Packet.ReceiveSwappedLevelPacket, { levels: this.levels })
+            emitToLobby(this.serverState, this.lobbyCode, Packet.ReceiveSwappedLevelPacket, { levels: validLevels })
 
             this.levels = []
 
             if (this.currentTurn >= this.totalTurns) {
                 this.swapEnded = true
                 setTimeout(() => emitToLobby(this.serverState, this.lobbyCode, Packet.SwapEndedPacket, {}), 750) // 0.75 seconds
-                
                 return
             }
             this.scheduleNextSwap()
         }
-        // else {
-        //     this.swapEnded = true
-        //     this.levels = offsetArray(this.levels, this.totalTurns - this.currentTurn)
-        //     emitToLobby(this.serverState, this.lobbyCode, Packet.ReceiveSwappedLevelPacket, { levels: this.levels })
-        //     Object.values(this.serverState.sockets[this.lobbyCode]).forEach(socket => {
-        //         socket.close(1000, this.closeReason)
-        //     })
-        // }
     }
 
     scheduleNextSwap() {
@@ -136,4 +164,3 @@ export class Swap {
         clearTimeout(this.timeout)
     }
 }
-
