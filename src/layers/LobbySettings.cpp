@@ -5,12 +5,7 @@ enum LobbySettingType {
     Turns,
     MinsPerTurn,
     Password,
-    IsPublic,
-    Tag 
-};
-
-static const std::vector<std::string> TAG_NAMES = {
-    "None", "Short", "Medium", "Long", "Layout", "Deco", "Impossible", "Triggers"
+    IsPublic 
 };
 
 class LobbySettingsCell : public CCNode {
