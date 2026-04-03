@@ -28,10 +28,10 @@ void NetworkManager::update(float dt) {
 }
 
 void NetworkManager::connect(bool shouldReconnect, std::function<void()> callback) {
-    log::debug("connecting");
+    log::debug("[Network] connecting...");
     if (this->isConnected && shouldReconnect) {
         // disconnect then reconnect
-        log::debug("already connected; disconnecting then reconnecting...");
+        log::debug("[Network] already connected; disconnecting then reconnecting...");
         this->showDisconnectPopup = false;
         this->disconnect();
     }
@@ -53,7 +53,7 @@ void NetworkManager::connect(bool shouldReconnect, std::function<void()> callbac
     socket.setOnMessageCallback([this, callback = std::move(callback)](const ix::WebSocketMessagePtr& msg) mutable {
         if (msg->type == ix::WebSocketMessageType::Error) {
             auto& errReason = msg->errorInfo.reason;
-            log::error("ixwebsocket error: {}", errReason);
+            log::error("[Network] ixwebsocket error: {}", errReason);
             Loader::get()->queueInMainThread([this, errReason = std::move(errReason)]() {
                 FLAlertLayer::create(
                     "CR Error",
@@ -63,7 +63,7 @@ void NetworkManager::connect(bool shouldReconnect, std::function<void()> callbac
             });
             return;
         } else if (msg->type == ix::WebSocketMessageType::Open) {
-            log::debug("connection success!");
+            log::debug("[Network] connection success!");
 
             // call middleware (this should run the provided cb)
             middleware([this, callback]() {
@@ -99,7 +99,7 @@ void NetworkManager::connect(bool shouldReconnect, std::function<void()> callbac
 
             return;
         } else if (msg->type == ix::WebSocketMessageType::Close) {
-            log::debug("connection closed");
+            log::debug("[Network] connection closed");
             this->isConnected = false;
             auto& reason = msg->closeInfo.reason;
             Loader::get()->queueInMainThread([this, reason = std::move(reason)]() mutable {
@@ -122,7 +122,10 @@ void NetworkManager::connect(bool shouldReconnect, std::function<void()> callbac
             });
             return;
         } else if (msg->type == ix::WebSocketMessageType::Message) {
-            if (msg.get()->str == "") return;
+            if (msg.get()->str == "") {
+                log::error("[Network] Received completely empty message string from server!");
+                return;
+            }
             this->onMessage(msg);
         }
     });
@@ -141,7 +144,7 @@ void NetworkManager::onMessage(const ix::WebSocketMessagePtr& msg) {
 
     auto packetIdIdx = strMsg.find("|");
     if (packetIdIdx == std::string::npos) {
-        log::error("invalid packet received");
+        log::error("[Network] invalid packet received (missing packet ID separator): {}", strMsg);
         return;
     }
 
@@ -150,7 +153,7 @@ void NetworkManager::onMessage(const ix::WebSocketMessagePtr& msg) {
 
     auto it = listeners.find(packetId);
     if (it == listeners.end()) {
-        log::error("unhandled packed ID {}", packetId);
+        log::error("[Network] unhandled packed ID {}", packetId);
         return;
     }
 
