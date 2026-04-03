@@ -5,7 +5,6 @@
 
 using namespace geode::prelude;
 
-// Factory method to create and initialize the ChatPanel
 ChatPanel* ChatPanel::create() {
     auto ret = new ChatPanel;
     if (ret->init()) {
@@ -16,17 +15,14 @@ ChatPanel* ChatPanel::create() {
     return nullptr;
 }
 
-// Sets up the network listener for incoming chat messages
 void ChatPanel::initialize() {
     if (!hasInitialized) {
         auto& nm = NetworkManager::get();
-        
-        // Listen for messages from the server
+
         nm.on<MessageSentPacket>([](MessageSentPacket packet) {
             messages.push_back(packet.message);
             messagesQueue.push_back(packet.message);
-            
-            // Show an in-game notification when a new message arrives
+
             Notification::create(
                 fmt::format("{} sent a message", packet.message.author.name),
                 CCSprite::createWithSpriteFrameName("GJ_chatBtn_001.png")
@@ -37,9 +33,7 @@ void ChatPanel::initialize() {
     }
 }
 
-// Initializes the popup UI (layout, inputs, buttons)
 bool ChatPanel::init() {
-    // Initialize base popup with size 350x280
     if (!Popup::init(350.f, 280.f)) {
         return false;
     }
@@ -47,49 +41,44 @@ bool ChatPanel::init() {
     this->setTitle("Chat");
     ChatPanel::initialize();
 
-    // Create a dark background container for the scroll layer
+    // Dark container behind the scroll area
     auto scrollContainer = CCScale9Sprite::create("square02b_001.png");
     scrollContainer->setContentSize({
         m_mainLayer->getContentWidth() - 50.f,
         m_mainLayer->getContentHeight() - 85.f
     });
-    scrollContainer->setColor(ccc3(0,0,0));
+    scrollContainer->setColor(ccc3(0, 0, 0));
     scrollContainer->setOpacity(75);
 
-    // Set up the scrollable list for chat messages
     scrollLayer = ScrollLayer::create(scrollContainer->getContentSize() - 10.f);
     scrollLayer->ignoreAnchorPointForPosition(false);
-    
-    // Layout for the scroll container (messages stack from bottom to top)
+
     scrollLayer->m_contentLayer->setLayout(
         ColumnLayout::create()
             ->setAxisReverse(true)
             ->setAutoGrowAxis(scrollLayer->getContentHeight())
             ->setAxisAlignment(AxisAlignment::End)
-            ->setGap(6.f) // Gap between message bubbles
+            ->setGap(6.f)
     );
     scrollContainer->addChildAtPosition(scrollLayer, Anchor::Center);
     m_mainLayer->addChildAtPosition(scrollContainer, Anchor::Center, ccp(0, 5.f));
 
-    // Create a container for the text input field and the send button
+    // Input + send button
     auto inputContainer = CCNode::create();
     inputContainer->setContentSize({ scrollContainer->getContentWidth(), 75.f });
     inputContainer->setAnchorPoint({ 0.5f, 0.f });
 
-    messageInput = TextInput::create(inputContainer->getContentWidth(), "Send a message to the lobby!", "chatFont.fnt");
-    
-    // Explicitly allow specific characters including: " ' ? ! * / . ,
-    // Add Russian alphabet here if Cyrillic support is needed
-    std::string allowedChars = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\"'?!*/.,";
+    messageInput = TextInput::create(
+        inputContainer->getContentWidth(), "Send a message to the lobby!", "chatFont.fnt"
+    );
+
+    std::string allowedChars =
+        " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\"'?!*/.,";
     messageInput->getInputNode()->setAllowedChars(allowedChars);
 
-    // Create the send message button
     auto sendMsgBtn = CCMenuItemExt::createSpriteExtraWithFrameName(
-        "GJ_chatBtn_001.png",
-        0.75f,
-        [this](CCObject*) {
-            this->sendMessage();
-        }
+        "GJ_chatBtn_001.png", 0.75f,
+        [this](CCObject*) { this->sendMessage(); }
     );
     sendMsgBtn->ignoreAnchorPointForPosition(true);
 
@@ -102,79 +91,101 @@ bool ChatPanel::init() {
     inputContainer->setLayout(RowLayout::create());
     m_mainLayer->addChildAtPosition(inputContainer, Anchor::Bottom, ccp(0, 10.f));
 
-    // Render any previously loaded messages
     for (auto message : ChatPanel::messages) {
         renderMessage(message);
     }
 
-    // Check for new messages every frame
     this->schedule(schedule_selector(ChatPanel::updateMessages));
 
     return true;
 }
 
-// Renders a single message with Player Icon (Cube) and Chat Bubble
+// ─────────────────────────────────────────────────────────────
+//  Render a single message: [Icon + Name]  [Comment Bubble]
+// ─────────────────────────────────────────────────────────────
 void ChatPanel::renderMessage(Message const& message) {
-    // 1. Create row container for Icon + Bubble
-    auto rowNode = CCNode::create();
-    rowNode->setAnchorPoint({0.f, 0.f});
-
-    // 2. Create Player Icon (Cube) using logic from PlayerCell
-    auto playerIcon = SimplePlayer::create(0);
     auto gm = GameManager::get();
 
+    // ── Left column: cube icon + username underneath ──────────
+    constexpr float iconColumnWidth = 55.f;
+
+    auto playerIcon = SimplePlayer::create(0);
     playerIcon->updatePlayerFrame(message.author.iconID, IconType::Cube);
     playerIcon->setColor(gm->colorForIdx(message.author.color1));
     playerIcon->setSecondColor(gm->colorForIdx(message.author.color2));
-
     if (message.author.color3 == -1) {
         playerIcon->disableGlowOutline();
     } else {
         playerIcon->setGlowOutline(gm->colorForIdx(message.author.color3));
     }
-    
     playerIcon->setScale(0.65f);
-    
-    // Wrap icon in a CCNode to keep Layout predictable
-    auto iconContainer = CCNode::create();
-    iconContainer->setContentSize({30.f, 30.f});
-    playerIcon->setPosition(iconContainer->getContentSize() / 2);
-    iconContainer->addChild(playerIcon);
 
-    // 3. Create Text
-    float maxTextWidth = scrollLayer->getContentWidth() - 50.f; // Account for icon size
-    
-    auto msgText = TextArea::create(
-        fmt::format("<cy>{}</c>: {}", message.author.name, message.message),
-        "chatFont.fnt", 0.5f, maxTextWidth, {0.f, 1.f}, 17.f, false
+    // Gold username label (like GD comments)
+    auto nameLabel = CCLabelBMFont::create(
+        message.author.name.c_str(), "goldFont.fnt"
     );
-    msgText->setAnchorPoint({ 0.f, 1.f }); // Anchor top-left
+    nameLabel->setAnchorPoint({0.5f, 0.5f});
+    nameLabel->setScale(0.45f);
+    // Clamp so the name fits under the icon
+    if (nameLabel->getContentWidth() * nameLabel->getScale() > iconColumnWidth) {
+        nameLabel->setScale(iconColumnWidth / nameLabel->getContentWidth());
+    }
 
-    float textHeight = msgText->m_label->m_lines->count() * 17.f;
-    msgText->setContentSize({maxTextWidth, textHeight});
+    // ── Right side: comment-style bubble ─────────────────────
+    constexpr float padX = 10.f;
+    constexpr float padY = 8.f;
+    float maxBubbleW = scrollLayer->getContentWidth() - iconColumnWidth - 10.f;
+    float maxTextW   = maxBubbleW - padX * 2.f;
 
-    // 4. Create Chat Bubble (Background)
+    // Message label — main GD font
+    auto msgLabel = CCLabelBMFont::create(
+        message.message.c_str(), "bigFont.fnt"
+    );
+    constexpr float textScale = 0.35f;
+    msgLabel->setScale(textScale);
+    msgLabel->setAnchorPoint({0.f, 0.5f});
+
+    // Enable word-wrap when the line is too long
+    if (msgLabel->getContentWidth() * textScale > maxTextW) {
+        msgLabel->setWidth(maxTextW / textScale);
+    }
+
+    float textH    = msgLabel->getContentHeight() * textScale;
+    float bubbleH  = std::max(textH + padY * 2.f, 30.f);
+
+    // Brown bubble background (classic GD comment look)
     auto bubble = CCScale9Sprite::create("square02b_001.png");
-    bubble->setColor(ccc3(0, 0, 0)); // Black bubble
-    bubble->setOpacity(120);         // Semi-transparent
-    
-    float paddingX = 8.f;
-    float paddingY = 8.f;
-    bubble->setContentSize({maxTextWidth + (paddingX * 2), textHeight + (paddingY * 2)});
-    
-    // Position text inside bubble
-    msgText->setPosition({paddingX, bubble->getContentHeight() - paddingY});
-    bubble->addChild(msgText);
+    bubble->setContentSize({maxBubbleW, bubbleH});
+    bubble->setColor(ccc3(130, 64, 33));   // GD-comment brown
+    bubble->setOpacity(210);
 
-    // 5. Build the Row Layout
-    rowNode->addChild(iconContainer);
+    // Place text centred vertically inside the bubble
+    msgLabel->setPosition({padX, bubbleH / 2.f});
+    bubble->addChild(msgLabel);
+
+    // ── Assemble the row ─────────────────────────────────────
+    float rowH = std::max(bubbleH, 48.f);
+
+    // Icon column (icon on top, name below, both centred)
+    auto iconColumn = CCNode::create();
+    iconColumn->setContentSize({iconColumnWidth, rowH});
+    iconColumn->addChild(playerIcon);
+    iconColumn->addChild(nameLabel);
+    iconColumn->setLayout(
+        ColumnLayout::create()
+            ->setAxisReverse(true)          // top → bottom
+            ->setGap(2.f)
+            ->setAxisAlignment(AxisAlignment::Center)
+            ->setCrossAxisAlignment(AxisAlignment::Center)
+    );
+    iconColumn->updateLayout();
+
+    // Row node holds icon column + bubble side-by-side
+    auto rowNode = CCNode::create();
+    rowNode->setAnchorPoint({0.f, 0.f});
+    rowNode->setContentSize({scrollLayer->getContentWidth(), rowH});
+    rowNode->addChild(iconColumn);
     rowNode->addChild(bubble);
-    
-    // Make row container match bubble's height (or icon height, whichever is larger)
-    float rowHeight = std::max(bubble->getContentHeight(), iconContainer->getContentHeight());
-    rowNode->setContentSize({scrollLayer->getContentWidth(), rowHeight});
-    
-    // Align items horizontally
     rowNode->setLayout(
         RowLayout::create()
             ->setGap(5.f)
@@ -183,12 +194,11 @@ void ChatPanel::renderMessage(Message const& message) {
     );
     rowNode->updateLayout();
 
-    // 6. Add to Scroll Layer
+    // Add to the scrollable message list
     scrollLayer->m_contentLayer->addChild(rowNode);
     scrollLayer->m_contentLayer->updateLayout();
 }
 
-// Processes the message queue and renders new incoming messages
 void ChatPanel::updateMessages(float dt) {
     if (messagesQueue.empty()) return;
 
@@ -198,7 +208,6 @@ void ChatPanel::updateMessages(float dt) {
     messagesQueue.clear();
 }
 
-// Clears the message history and unbinds the network listener
 void ChatPanel::clearMessages() {
     messages.clear();
     auto& nm = NetworkManager::get();
@@ -206,27 +215,23 @@ void ChatPanel::clearMessages() {
     hasInitialized = false;
 }
 
-// Validates and sends the message to the server
 void ChatPanel::sendMessage() {
     auto msgInput = messageInput->getString();
-    
-    // Prevent sending empty messages or messages containing only spaces
+
     if (msgInput.empty()) return;
     if (geode::utils::string::replace(" ", msgInput, "") == "") return;
 
     auto& nm = NetworkManager::get();
     nm.send(SendMessagePacket::create(msgInput));
 
-    // Clear the input field after sending
     messageInput->setString("");
 }
 
-// Allows sending a message by pressing the "Enter" key
 void ChatPanel::keyDown(cocos2d::enumKeyCodes keycode, double timestamp) {
-    if (keycode == cocos2d::KEY_Enter && CCIMEDispatcher::sharedDispatcher()->hasDelegate()) {
+    if (keycode == cocos2d::KEY_Enter &&
+        CCIMEDispatcher::sharedDispatcher()->hasDelegate()) {
         sendMessage();
     } else {
-        // Forward other keys to the base Popup class
         Popup::keyDown(keycode, timestamp);
     }
 }
