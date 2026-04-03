@@ -261,7 +261,7 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
 
     if (!mainLayer) return;
 
-    // --- Логика Уведомлений Входа/Выхода ---
+    // --- Join/Leave Notifications Logic ---
     if (isFirstRefresh) {
         m_currentPlayers.clear();
         for (auto& acc : info.accounts) m_currentPlayers.push_back(acc.userID);
@@ -282,61 +282,9 @@ void LobbyLayer::refresh(LobbyInfo info, bool isFirstRefresh) {
         m_currentPlayers = newPlayers;
     }
 
-    // --- Обновление визуальных настроек лобби (СЛЕВА СВЕРХУ) ---
-    // Удаляем старый UI настроек, если он есть
-    if (auto oldSettingsUI = mainLayer->getChildByID("lobby-settings-display")) {
-        oldSettingsUI->removeFromParent();
-    }
+    // [REMOVED: The visual tags and turns/mins display code that was here previously]
 
-    // Создаем новый контейнер для настроек
-    auto settingsDisplay = CCNode::create();
-    settingsDisplay->setID("lobby-settings-display");
-
-    // Текст: Ходы и время
-    auto statsLabel = CCLabelBMFont::create(
-        fmt::format("Turns: {} | Mins/Turn: {}", info.settings.turns, info.settings.minutesPerTurn).c_str(),
-        "chatFont.fnt"
-    );
-    statsLabel->setAnchorPoint({ 0.f, 1.f });
-
-    // Текст: Выбранный тег с цветом
-    std::string tagNames[] = {"None", "Short", "Medium", "Long", "Layout", "Deco", "Impossible", "Triggers"};
-    ccColor3B tagColors[] = {
-        {255, 255, 255}, // 0 None (Белый)
-        {100, 255, 100}, // 1 Short (Светло-зеленый)
-        {255, 255, 100}, // 2 Medium (Желтый)
-        {255, 150, 50},  // 3 Long (Оранжевый)
-        {100, 255, 255}, // 4 Layout (Бирюзовый)
-        {255, 100, 255}, // 5 Deco (Розовый/Пурпурный)
-        {255, 50, 50},   // 6 Impossible (Красный)
-        {200, 100, 255}  // 7 Triggers (Фиолетовый)
-    };
-    
-    int tagId = info.settings.tag;
-    if (tagId < 0 || tagId >= 8) tagId = 0;
-
-    auto tagPrefix = CCLabelBMFont::create("Tag: ", "chatFont.fnt");
-    auto tagValue = CCLabelBMFont::create(tagNames[tagId].c_str(), "chatFont.fnt");
-    tagValue->setColor(tagColors[tagId]);
-
-    auto tagContainer = CCMenu::create(); // Используем меню просто как Layout контейнер
-    tagContainer->addChild(tagPrefix);
-    tagContainer->addChild(tagValue);
-    tagContainer->setLayout(RowLayout::create()->setGap(2.f)->setAxisAlignment(AxisAlignment::Start));
-    tagContainer->setAnchorPoint({ 0.f, 1.f });
-    tagContainer->setContentSize({ 200.f, tagPrefix->getContentHeight() });
-
-    settingsDisplay->addChild(statsLabel);
-    settingsDisplay->addChild(tagContainer);
-    settingsDisplay->setLayout(ColumnLayout::create()->setGap(5.f)->setAxisReverse(true)->setAxisAlignment(AxisAlignment::Start));
-    settingsDisplay->setContentSize({ 200.f, 50.f });
-    settingsDisplay->setPosition({ 15.f, size.height - 15.f });
-    settingsDisplay->setAnchorPoint({ 0.f, 1.f });
-
-    mainLayer->addChild(settingsDisplay);
-    // -----------------------------------------------------------
-
-    // Заголовок (только при первом заходе)
+    // Title label (only on first refresh)
     if (isFirstRefresh) {
         titleLabel = CCLabelBMFont::create(info.settings.name.c_str(), "bigFont.fnt");
         titleLabel->limitLabelWidth(275.f, 1.f, 0.1f);
