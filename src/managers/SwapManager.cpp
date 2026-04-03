@@ -128,57 +128,31 @@ void SwapManager::registerListeners() {
 
     nm.setDisconnectCallback([](std::string reason) {});
 
-    // --- SENDING THE LEVEL TO THE SERVER ---
     nm.on<TimeToSwapPacket>([this](TimeToSwapPacket p) {
         auto& nm = NetworkManager::get();
 
         Notification::create("Swapping levels!", NotificationIcon::Info, 2.5f)->show();
 
-        // 1. Force save the level
+        auto filePath = std::filesystem::temp_directory_path() / fmt::format("temp{}.gmd", rand());
+
         if (auto editorLayer = LevelEditorLayer::get()) {
-            // Update internal level string before saving to prevent race condition
-            editorLayer->updateLevelString(); 
             auto fakePauseLayer = EditorPauseLayer::create(editorLayer);
             fakePauseLayer->saveLevel();
         }
-        
         auto lvl = EditorIDs::getLevelByID(levelId);
-        if (!lvl) {
-            log::error("[SwapManager] CRITICAL ERROR: Could not find level by ID {} before swapping!", levelId);
-            return;
-        }
+        // this crashes macos when recieving the level
+        // do not ask me why
+        // this game is taped-together jerry-rigged piece of software
+        // lvl->m_levelDesc = fmt::format("from: {}", this->createAccountType().name);
 
-        // 2. Generate level string
         auto b = new DS_Dictionary();
         lvl->encodeWithCoder(b);
-        std::string finalLevelString = b->saveRootSubDictToString();
-        
-        // 3. FIX MEMORY LEAK: We must delete 'b' after using it!
-        delete b; 
-
-        // 4. PREVENT EMPTY LEVEL BUG
-        if (finalLevelString.empty() || finalLevelString.size() < 10) {
-            log::error("[SwapManager] CRITICAL ERROR: b->saveRootSubDictToString() generated an EMPTY string!");
-            log::error("[SwapManager] The game engine did not save the level fast enough (Race Condition).");
-            
-            // Fallback: Try to use the cached m_levelString directly
-            if (!lvl->m_levelString.empty()) {
-                finalLevelString = lvl->m_levelString;
-                log::warn("[SwapManager] Used fallback m_levelString (Size: {} bytes).", finalLevelString.size());
-            } else {
-                log::error("[SwapManager] Fallback failed! m_levelString is also empty. Sending void level...");
-            }
-        } else {
-#ifdef CR_DEBUG
-            log::debug("[SwapManager] Successfully generated level string. Size: {} bytes.", finalLevelString.size());
-#endif
-        }
 
         LevelData lvlData = {
             .levelName = lvl->m_levelName,
             .songID = lvl->m_songID,
             .songIDs = lvl->m_songIDs,
-            .levelString = finalLevelString
+            .levelString = b->saveRootSubDictToString()
         };
 
         nm.send(
@@ -190,41 +164,33 @@ void SwapManager::registerListeners() {
             GameLevelManager::sharedState()->deleteLevel(lvl);
         }
     });
-
-    // --- RECEIVING THE LEVEL FROM THE SERVER ---
     nm.on<ReceiveSwappedLevelPacket>([this](ReceiveSwappedLevelPacket packet) {
+        // if (packet->levels.size() < swapIdx) {
+        //     FLAlertLayer::create(
+        //         "Creation Rotation",
+        //         "<cr>There was an error while fetching the swapped level. If you're reading this, something has gone terribly wrong, please report it at once.</c>",
+        //         "OK"
+        //     )->show();
+        //     return;
+        // }
         LevelData lvlData;
-        bool foundMyLevel = false;
 
         for (auto& swappedLevel : packet.levels) {
             if (swappedLevel.accountID != cr::utils::createAccountType().accountID) continue;
 
             lvlData = std::move(swappedLevel.level);
-            foundMyLevel = true;
             break;
-        }
-
-        // 1. PREVENT EMPTY LEVEL BUG ON RECEIVE
-        if (!foundMyLevel) {
-            log::error("[SwapManager] CRITICAL ERROR: Server did not send a level for my Account ID!");
-        } else if (lvlData.levelString.empty()) {
-            log::error("[SwapManager] CRITICAL ERROR: The server sent a level, but the levelString is EMPTY!");
-            log::error("[SwapManager] This means the previous player failed to upload it, or the server wiped it.");
-        } else {
-#ifdef CR_DEBUG
-            log::debug("[SwapManager] Successfully received swapped level! String size: {} bytes.", lvlData.levelString.size());
-#endif
         }
 
         auto lvl = GJGameLevel::create();
 
-        // 2. Load the level data
+        // lvl->m_levelName = lvlData.levelName;
+        // lvl->m_levelString = lvlData.levelString;
+        // lvl->m_songID = lvlData.songID;
+        // lvl->m_songIDs = lvlData.songIDs;
         auto b = new DS_Dictionary();
         b->loadRootSubDictFromString(lvlData.levelString);
         lvl->dataLoaded(b);
-        
-        // 3. FIX MEMORY LEAK: We must delete 'b' after loading data!
-        delete b;
 
         lvl->m_levelType = GJLevelType::Editor;
 
@@ -242,9 +208,8 @@ void SwapManager::registerListeners() {
 
         roundStartedTime = time(nullptr);
     });
-
     nm.on<SwapEndedPacket>([this](SwapEndedPacket p) {
-        log::debug("[SwapManager] swap ended; disconnecting from server");
+        log::debug("swap ended; disconnecting from server");
         auto& nm = NetworkManager::get();
         nm.showDisconnectPopup = false;
         this->disconnectLobby();
