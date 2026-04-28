@@ -31,7 +31,7 @@ export default function getConfig(): Config {
             boomlingsUrl: "https://boomlings.com",
             botAccountID: 0,
             botAccountGJP2: "",
-            masterPassword: "PLEASE_CHANGE_THIS"
+            masterPassword: ""
         }
         fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 4))
     }

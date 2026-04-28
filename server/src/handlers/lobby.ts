@@ -151,10 +151,9 @@ const lobbyHandlers: Handlers = {
         if (!Object.keys(state.lobbies).includes(code)) return
         sendPacket(socket, Packet.ReceiveLobbyInfoPacket, { info: state.lobbies[code] })
     },
-    2005: (socket) => { // DisconnectFromLobbyPacket
-        socket.close()
-        // this is probably not needed anymore
-        // disconnectFromLobby(data)
+    2005: (socket, _, data, state) => { // DisconnectFromLobbyPacket
+        socket.close(1000, "left the lobby")
+        disconnectFromLobby(data, state)
     },
     2006: (socket, args, data, state) => { // UpdateLobbyPacket
         if (matcher.hasMatch(args.settings.name) && args.settings.isPublic) {
@@ -202,6 +201,17 @@ const lobbyHandlers: Handlers = {
         if (account.userID == userID) {
             sendError(socket, "you cannot kick yourself")
             return
+        }
+
+        // Validate that the user exists in the lobby
+        if (!state.sockets[lobbyCode][userID]) {
+            sendError(socket, "user is not in this lobby")
+            return
+        }
+
+        // Remove from swapOrder if swap is active
+        if (state.swaps[lobbyCode]) {
+            state.swaps[lobbyCode].removePlayer(userID)
         }
 
         state.sockets[lobbyCode][userID].close(1000, "kicked from lobby by owner; you can no longer rejoin")
