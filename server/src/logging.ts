@@ -65,6 +65,13 @@ namespace log {
             TextColor.Yellow
         )
     }
+    export function warn(contents: any) {
+        log(
+            "WARN",
+            contents, 
+            TextColor.Yellow
+        )
+    }
 }
 
 export default log
