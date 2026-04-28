@@ -38,9 +38,6 @@ export interface Swap {
 
     serverState: ServerState
 
-    timeout: NodeJS.Timeout
-    turnTimeout: NodeJS.Timeout
-
     swap(ending?: boolean, reason?: string): void
     addLevel(level: LevelData, accId: number): void
     checkSwap(): void
@@ -63,8 +60,8 @@ export class Swap {
     isSwapEnding: boolean
     closeReason: string
     serverState: ServerState
-    timeout: NodeJS.Timeout
-    turnTimeout: NodeJS.Timeout
+    timeout!: NodeJS.Timeout
+    turnTimeout!: NodeJS.Timeout
 
     constructor(lobbyCode: string, state: ServerState) {
         this.lobbyCode = lobbyCode
@@ -76,6 +73,7 @@ export class Swap {
 
         this.levels = []
 
+        this.swapEnded = false
         this.currentlySwapping = false
         this.isSwapEnding = false
         this.closeReason = ""

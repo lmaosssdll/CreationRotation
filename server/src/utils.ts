@@ -69,7 +69,7 @@ export function disconnectFromLobby(data: SocketData, state: ServerState) {
         state.lobbies[lobbyCode].accounts.splice(index, 1)
 
         // Remove player from swap if active
-        if (state.swaps[lobbyCode] && state.swaps[lobbyCode].removePlayer) {
+        if (state.swaps[lobbyCode]) {
             state.swaps[lobbyCode].removePlayer(account.accountID)
         }
 

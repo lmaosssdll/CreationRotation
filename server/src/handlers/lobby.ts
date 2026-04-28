@@ -4,7 +4,8 @@ import {
     sendPacket,
     sendError,
     broadcastLobbyUpdate,
-    emitToLobby
+    emitToLobby,
+    disconnectFromLobby
 } from "@/utils"
 import { Packet } from "@/types/packet"
 import { Lobby } from "@/types/lobby"
