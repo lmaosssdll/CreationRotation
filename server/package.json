@@ -24,6 +24,7 @@
   },
   "scripts": {
     "dev": "tsc && tsc-alias && node out/main.js",
-    "build": "tsc && tsc-alias"
+    "build": "tsc && tsc-alias",
+    "postinstall": "npm rebuild sqlite3 --build-from-source"
   }
 }
