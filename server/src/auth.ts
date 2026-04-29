@@ -53,7 +53,6 @@ export class AuthManager {
 
         const cfWorkerUrl = this.state.serverConfig.cfWorkerUrl
 
-        // Если в конфиге указан CF Worker — шлём через него
         const fetchUrl = cfWorkerUrl
             ? `${cfWorkerUrl}?path=${encodeURIComponent(url)}`
             : `${this.state.serverConfig.boomlingsUrl}/${url}`
@@ -92,21 +91,19 @@ export class AuthManager {
     }
 
     private async updateMessagesCache() {
-        // 1. Получаем ответ в переменную
         const rawResponse = await this.sendAuthenticatedBoomlingsReq("database/getGJMessages20.php", {})
 
-        // 2. Логируем для отладки
-        log.info(`[DEBUG] Raw messages from RobTop: ${rawResponse}`)
+        // Лог для проверки ответа от Роба через Cloudflare
+        log.info(`[DEBUG] Raw messages: ${rawResponse}`)
 
         if (!rawResponse || rawResponse === "-1" || rawResponse.startsWith("<")) {
-            log.warn("[auth] Invalid response from Boomlings. Check Bot GJP2 or CF Worker.")
+            log.warn("[auth] Invalid response from Boomlings. Check bot config.")
             return
         }
 
         const messagesStr = rawResponse.split("|")
-        log.info("refreshing cache")
-
         this.cachedMessages = {}
+
         messagesStr.forEach((messageStr) => {
             const msgObj = parseKeyMap(messageStr)
             const msgID = parseInt(msgObj["1"])
@@ -122,26 +119,30 @@ export class AuthManager {
             }
         })
 
+        log.info("refreshing cache")
+
         let outdatedMessages: number[] = []
 
-        // ВАЖНО: Используем for...of вместо forEach, чтобы await работал!
+        // Используем for...of для асинхронности
         for (const acc of this.accountsToAuth) {
             const verifyCode = this.state.verifyCodes[acc.account.accountID]
             
-            // Ищем сообщение, где ID отправителя совпадает и заголовок сообщения равен коду верификации
+            // Ищем сообщение по ID аккаунта и коду в заголовке
             const message = Object.values(this.cachedMessages).find(
                 m => m.accountID === acc.account.accountID && m.title.trim() === verifyCode
             )
 
             if (message) {
-                log.info(`[auth] Account verified: ${acc.account.username}`)
+                // ИСПОЛЬЗУЕМ message.username, так как в Account его может не быть
+                log.info(`[auth] Account verified: ${message.username} (ID: ${message.accountID})`)
+                
                 const token = await this.state.dbState.registerUser(acc.account)
                 sendPacket(acc.socket, Packet.ReceiveTokenPacket, { token })
                 outdatedMessages.push(message.messageID)
             }
         }
 
-        // Очищаем очередь только после цикла
+        // Чистим список ожидающих только после завершения цикла
         this.accountsToAuth = []
 
         if (outdatedMessages.length > 0) {
