@@ -33,6 +33,7 @@ export class AuthManager {
     constructor(state: ServerState) {
         this.state = state
         this.accountsToAuth = []
+        this.cachedMessages = {}
 
         setInterval(() => {
             if (this.accountsToAuth.length <= 0) return
@@ -40,7 +41,6 @@ export class AuthManager {
         }, 4500)
     }
 
-    // ✅ Определяет, слать запрос через CF Worker или напрямую
     private async sendBoomlingsReq(
         url: string,
         data: { [key: string]: string },
@@ -60,14 +60,20 @@ export class AuthManager {
 
         log.info(`[boomlings] ${cfWorkerUrl ? "via CF Worker" : "direct"} → ${url}`)
 
-        return (await fetch(fetchUrl, {
-            headers: {
-                "User-Agent": "",
-                "Content-Type": "application/x-www-form-urlencoded"
-            },
-            method,
-            body: params
-        })).text()
+        try {
+            const response = await fetch(fetchUrl, {
+                headers: {
+                    "User-Agent": "",
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                method,
+                body: params.toString()
+            })
+            return await response.text()
+        } catch (e: any) {
+            log.error(`[boomlings] Error: ${e.message}`)
+            return "-1"
+        }
     }
 
     private async sendAuthenticatedBoomlingsReq(
@@ -86,19 +92,26 @@ export class AuthManager {
     }
 
     private async updateMessagesCache() {
-        const messagesStr = (
-            await this.sendAuthenticatedBoomlingsReq("database/getGJMessages20.php", {})
-        ).split("|")
+        // 1. Получаем ответ в переменную
+        const rawResponse = await this.sendAuthenticatedBoomlingsReq("database/getGJMessages20.php", {})
 
+        // 2. Логируем для отладки
+        log.info(`[DEBUG] Raw messages from RobTop: ${rawResponse}`)
+
+        if (!rawResponse || rawResponse === "-1" || rawResponse.startsWith("<")) {
+            log.warn("[auth] Invalid response from Boomlings. Check Bot GJP2 or CF Worker.")
+            return
+        }
+
+        const messagesStr = rawResponse.split("|")
         log.info("refreshing cache")
-
-        log.info(`[DEBUG] Raw messages from RobTop: ${rawResponse}`);
 
         this.cachedMessages = {}
         messagesStr.forEach((messageStr) => {
             const msgObj = parseKeyMap(messageStr)
             const msgID = parseInt(msgObj["1"])
-            if (isNaN(msgID)) return // пропускаем битые записи
+            if (isNaN(msgID)) return 
+            
             this.cachedMessages[msgID] = {
                 accountID: parseInt(msgObj["2"]),
                 age: msgObj["7"],
@@ -111,18 +124,24 @@ export class AuthManager {
 
         let outdatedMessages: number[] = []
 
-        Object.values(this.cachedMessages).forEach(message => {
-            this.accountsToAuth.forEach(async acc => {
-                if (message.accountID !== acc.account.accountID) return
+        // ВАЖНО: Используем for...of вместо forEach, чтобы await работал!
+        for (const acc of this.accountsToAuth) {
+            const verifyCode = this.state.verifyCodes[acc.account.accountID]
+            
+            // Ищем сообщение, где ID отправителя совпадает и заголовок сообщения равен коду верификации
+            const message = Object.values(this.cachedMessages).find(
+                m => m.accountID === acc.account.accountID && m.title.trim() === verifyCode
+            )
 
-                if (message.title === this.state.verifyCodes[acc.account.accountID]) {
-                    const token = await this.state.dbState.registerUser(acc.account)
-                    sendPacket(acc.socket, Packet.ReceiveTokenPacket, { token })
-                    outdatedMessages.push(message.messageID)
-                }
-            })
-        })
+            if (message) {
+                log.info(`[auth] Account verified: ${acc.account.username}`)
+                const token = await this.state.dbState.registerUser(acc.account)
+                sendPacket(acc.socket, Packet.ReceiveTokenPacket, { token })
+                outdatedMessages.push(message.messageID)
+            }
+        }
 
+        // Очищаем очередь только после цикла
         this.accountsToAuth = []
 
         if (outdatedMessages.length > 0) {
@@ -154,4 +173,4 @@ export class AuthManager {
         }
         return result
     }
-                }
+}
