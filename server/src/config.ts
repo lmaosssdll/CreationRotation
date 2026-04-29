@@ -8,6 +8,7 @@ export type Config = {
     botAccountID: number
     botAccountGJP2: string
     masterPassword: string
+    cfWorkerUrl?: string // ✅ новое поле
 }
 
 const configPath = path.join(appRootPath.path, "config.json")
@@ -20,7 +21,8 @@ export default function getConfig(): Config {
             boomlingsUrl: process.env.BOOMLINGS_URL ?? "https://boomlings.com",
             botAccountID: Number(process.env.BOT_ACCOUNT_ID),
             botAccountGJP2: process.env.BOT_ACCOUNT_GJP2 ?? "",
-            masterPassword: process.env.MASTER_PASSWORD ?? "PLEASE_CHANGE_THIS"
+            masterPassword: process.env.MASTER_PASSWORD ?? "PLEASE_CHANGE_THIS",
+            cfWorkerUrl: process.env.CF_WORKER_URL ?? undefined // ✅ новое поле
         }
     }
 
@@ -31,7 +33,8 @@ export default function getConfig(): Config {
             boomlingsUrl: "https://boomlings.com",
             botAccountID: 0,
             botAccountGJP2: "",
-            masterPassword: ""
+            masterPassword: "",
+            cfWorkerUrl: "" // ✅ новое поле
         }
         fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 4))
     }
