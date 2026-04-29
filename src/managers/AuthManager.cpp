@@ -66,10 +66,6 @@ void AuthManager::beginAuthorization(std::function<void()> callback) {
     this->beginAuthorizationImpl();
 }
 
-void AuthManager::beginAuthorization() {
-    this->beginAuthorizationImpl();
-}
-
 void AuthManager::beginAuthorizationImpl() {
     auto& nm = NetworkManager::get();
     nm.send(
