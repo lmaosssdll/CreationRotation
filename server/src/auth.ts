@@ -92,6 +92,8 @@ export class AuthManager {
 
         log.info("refreshing cache")
 
+        log.info(`[DEBUG] Raw messages from RobTop: ${rawResponse}`);
+
         this.cachedMessages = {}
         messagesStr.forEach((messageStr) => {
             const msgObj = parseKeyMap(messageStr)
