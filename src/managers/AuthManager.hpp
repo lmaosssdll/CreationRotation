@@ -15,14 +15,18 @@ public:
         return instance;
     }
 
-    void beginAuthorization(std::function<void()> callback);
-    void login(std::function<void()> callback = []() {});
+    void beginAuthorization(std::function<void()> callback = nullptr);
+    void login(std::function<void()> callback = nullptr);
 
     // delegate stuff
     void uploadMessageFinished(int);
     void uploadMessageFailed(int);
 protected:
     AuthManager();
+
+    std::function<void()> m_loginCallback;
+
+    void beginAuthorizationImpl();
 
     std::string getToken() {
         return Mod::get()->getSavedValue<std::string>("token", "");

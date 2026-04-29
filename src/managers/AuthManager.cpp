@@ -12,9 +12,12 @@ AuthManager::AuthManager() {
             "The server received an <cr>invalid token</c>. Would you like to reauthenticate with the server?",
             "Cancel", "Yes",
             [this](auto, bool btn2) {
-                if (!btn2) return;
+                if (!btn2) {
+                    m_loginCallback = nullptr;
+                    return;
+                }
 
-                this->beginAuthorization([]() {});
+                this->beginAuthorization();
             }
         );
     });
@@ -33,7 +36,41 @@ AuthManager::AuthManager() {
     });
 }
 
+void AuthManager::login(std::function<void()> callback) {
+    if (callback) {
+        m_loginCallback = std::move(callback);
+    }
+
+    if (this->getToken().empty()) {
+        this->beginAuthorization();
+        return;
+    }
+
+    auto& nm = NetworkManager::get();
+    nm.send(
+        LoginPacket::create(this->getToken())
+    );
+    nm.on<LoggedInPacket>([this](LoggedInPacket) mutable {
+        if (m_loginCallback) {
+            auto cb = std::move(m_loginCallback);
+            m_loginCallback = nullptr;
+            cb();
+        }
+    });
+}
+
 void AuthManager::beginAuthorization(std::function<void()> callback) {
+    if (callback) {
+        m_loginCallback = std::move(callback);
+    }
+    this->beginAuthorizationImpl();
+}
+
+void AuthManager::beginAuthorization() {
+    this->beginAuthorizationImpl();
+}
+
+void AuthManager::beginAuthorizationImpl() {
     auto& nm = NetworkManager::get();
     nm.send(
         RequestAuthorizationPacket::create(
@@ -49,24 +86,9 @@ void AuthManager::beginAuthorization(std::function<void()> callback) {
             "Creation Rotation Identity Verification. This message can be safely deleted."
         );
     });
-    nm.on<ReceiveTokenPacket>([this, callback](ReceiveTokenPacket packet) {
+    nm.on<ReceiveTokenPacket>([this](ReceiveTokenPacket packet) {
         this->setToken(std::move(packet.token));
-        this->login(callback);
-    });
-}
-
-void AuthManager::login(std::function<void()> callback) {
-    if (this->getToken().empty()) {
-        this->beginAuthorization(std::move(callback));
-        return;
-    }
-
-    auto& nm = NetworkManager::get();
-    nm.send(
-        LoginPacket::create(this->getToken())
-    );
-    nm.on<LoggedInPacket>([callback](LoggedInPacket) mutable {
-        callback();
+        this->login();
     });
 }
 
