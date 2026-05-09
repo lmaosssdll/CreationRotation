@@ -7,9 +7,9 @@
 		"ios": "2.2081"
 	},
 	"id": "techstudent10.creation_rotation",
-	"name": "Creation Rotation",
-	"version": "v1.0.0-beta.11",
-	"developer": "TechStudent10",
+	"name": "Creation Rotation Reborn",
+	"version": "v2",
+	"developer": "TechStudent10,lmaosssdll",
 	"description": "Wulzy's Creation Rotation as a mod",
 	"resources": {
 		"sprites": [
@@ -27,7 +27,7 @@
 		"server-url": {
 			"name": "Server URL",
 			"type": "string",
-			"default": "wss://creationrotation.underscored.me",
+			"default": "wss://creationrotation.onrender.com",
 			"description": "The Creation Rotation server URL",
 			"filter": "1234567890qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM.:/"
 		},
@@ -50,12 +50,12 @@
 		}
 	},
 	"links": {
-		"community": "https://discord.gg/U6FCeekqdt", 
-		"source": "https://github.com/TechStudent10/CreationRotation"
+		"community": "https://discord.gg/9N96AJNTvs", 
+		"source": "https://github.com/lmaosssdll/CreationRotation"
 	},
 	"issues": {
 		"info": "Report issues to the GH page",
-		"url": "https://github.com/TechStudent10/CreationRotation/issues"
+		"url": "https://github.com/lmaosssdll/CreationRotation/issues"
 	},
 	"tags": [
 		"editor",
