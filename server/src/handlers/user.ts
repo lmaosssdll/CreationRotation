@@ -16,8 +16,13 @@ async function isModerator(state: ServerState, userID: number) {
 
 const userHandlers: Handlers = {
     5001: async (socket, args, data, state) => { // LoginPacket        
-        let modVersion = args.version.replace("v", "")
-        if (modVersion !== version) {
+        const modVersion = args.version.replace("v", "").toLowerCase()
+        
+        // Accept both mod clients and official clients (with "official" or empty clientType)
+        const isOfficialClient = args.clientType === "official" || args.clientType === ""
+        
+        // Only check version for mod clients, allow official clients with any version
+        if (!isOfficialClient && modVersion !== version) {
             socket.close(1000, `version mismatch: mod version <cy>${modVersion}</c> does not equal server version <cy>${version}</c>`)
             return
         }

@@ -66,7 +66,8 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
     cellMenu->addChild(nameBtn);
 
     // Add kick button if current user is host and not kicking themselves
-    if (canKick && account.userID != GameManager::get()->m_playerUserID.value()) {
+    auto& gm = GameManager::get();
+    if (canKick && account.userID != gm->m_playerUserID.value()) {
         auto kickSpr = CCSprite::createWithSpriteFrameName("accountBtn_removeFriend_001.png");
         kickSpr->setScale(0.725f);
         auto kickBtn = CCMenuItemSpriteExtra::create(
@@ -85,10 +86,11 @@ bool PlayerCell::init(Account account, float width, bool canKick) {
 void PlayerCell::onKickUser(CCObject* sender) {
     geode::createQuickPopup(
         "Kick User",
-        fmt::format("Would you like to kick user <cy>\"{}\"</c>? Doing so will <cr>not allow them</c> to join back.", m_account.name),
-        "Close", "Kick",
+        fmt::format("Are you sure you want to kick <cy>{}</c>? They will <cr>not</c> be able to rejoin this lobby.", m_account.name),
+        "Cancel", "Kick",
         [this](auto, bool btn2) {
             if (!btn2) return;
+            
             auto& nm = NetworkManager::get();
             nm.send(KickUserPacket::create(m_account.userID));
         }
@@ -230,6 +232,8 @@ bool LobbyLayer::init(std::string code) {
     SwapManager::get().getLobbyInfo([this, alive = m_alive](LobbyInfo info) {
         if (!*alive) return;
         refresh(info, true);
+    }, [](std::string error) {
+        log::error("Failed to get lobby info: {}", error);
     });
     
     registerListeners();
@@ -399,15 +403,20 @@ void LobbyLayer::onStart(CCObject* sender) {
 // Triggered when host clicks settings
 void LobbyLayer::onSettings(CCObject* sender) {
     auto& lm = SwapManager::get();
-    lm.getLobbyInfo([this, alive = m_alive](LobbyInfo info) {
-        if (!*alive) return;
-        auto settingsPopup = LobbySettingsPopup::create(info.settings, [this, alive](LobbySettings settings) {
+    lm.getLobbyInfo(
+        [this, alive = m_alive](LobbyInfo info) {
             if (!*alive) return;
-            auto& lm = SwapManager::get();
-            lm.updateLobby(settings);
-        });
-        settingsPopup->show();
-    });
+            auto settingsPopup = LobbySettingsPopup::create(info.settings, [this, alive](LobbySettings settings) {
+                if (!*alive) return;
+                auto& lm = SwapManager::get();
+                lm.updateLobby(settings);
+            });
+            settingsPopup->show();
+        },
+        [](std::string error) {
+            log::error("Failed to get lobby settings: {}", error);
+        }
+    );
 }
 
 // Draws borders and corners around the player list

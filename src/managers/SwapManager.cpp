@@ -61,24 +61,30 @@ void SwapManager::joinLobby(std::string code, std::function<void()> callback) {
     }, true);
 }
 
-void SwapManager::getLobbyAccounts(std::function<void(std::vector<Account>)> callback) {
+void SwapManager::getLobbyAccounts(std::function<void(std::vector<Account>)> callback, std::function<void(std::string)> onError) {
     CR_REQUIRE_CONNECTION()
 
     auto& nm = NetworkManager::get();
     nm.send(GetAccountsPacket::create(this->currentLobbyCode));
-    nm.on<ReceiveAccountsPacket>([callback = std::move(callback)](ReceiveAccountsPacket accounts) {
+    nm.on<ReceiveAccountsPacket>([callback = std::move(callback), onError = std::move(onError)](ReceiveAccountsPacket accounts) {
+        if (onError && accounts.accounts.empty()) {
+            onError("No accounts in lobby");
+        }
         callback(std::move(accounts.accounts));
-    });
+    }, true);
 }
 
-void SwapManager::getLobbyInfo(std::function<void(LobbyInfo)> callback) {
+void SwapManager::getLobbyInfo(std::function<void(LobbyInfo)> callback, std::function<void(std::string)> onError) {
     CR_REQUIRE_CONNECTION()
 
     auto& nm = NetworkManager::get();
     nm.send(GetLobbyInfoPacket::create(this->currentLobbyCode));
-    nm.on<ReceiveLobbyInfoPacket>([callback = std::move(callback)](ReceiveLobbyInfoPacket packet) {
+    nm.on<ReceiveLobbyInfoPacket>([callback = std::move(callback), onError = std::move(onError)](ReceiveLobbyInfoPacket packet) {
+        if (onError && packet.info.accounts.empty()) {
+            log::warn("Lobby info received but no accounts (possible error)");
+        }
         callback(std::move(packet.info));
-    });
+    }, true);
 }
 
 void SwapManager::updateLobby(LobbySettings updatedLobby) {
@@ -106,14 +112,17 @@ void SwapManager::disconnectLobby() {
 void SwapManager::startSwap(SwapStartedPacket packet) {
     getLobbyInfo([this](LobbyInfo info) {
         secondsPerRound = info.settings.minutesPerTurn * 60;
+        log::info("Swap started. {} minutes per turn", info.settings.minutesPerTurn);
     });
+
+    registerListeners();
 
     auto glm = GameLevelManager::sharedState();
     auto newLvl = glm->createNewLevel();
 
     levelId = EditorIDs::getID(newLvl);
-
-    registerListeners();
+    
+    log::info("Created new level with ID: {}", levelId);
 
     roundStartedTime = time(nullptr);
 
@@ -131,19 +140,18 @@ void SwapManager::registerListeners() {
     nm.on<TimeToSwapPacket>([this](TimeToSwapPacket p) {
         auto& nm = NetworkManager::get();
 
-        Notification::create("Swapping levels!", NotificationIcon::Info, 2.5f)->show();
-
-        auto filePath = std::filesystem::temp_directory_path() / fmt::format("temp{}.gmd", rand());
+        Notification::create("Sending your level...", NotificationIcon::Info, 2.5f)->show();
 
         if (auto editorLayer = LevelEditorLayer::get()) {
             auto fakePauseLayer = EditorPauseLayer::create(editorLayer);
             fakePauseLayer->saveLevel();
         }
+        
         auto lvl = EditorIDs::getLevelByID(levelId);
-        // this crashes macos when recieving the level
-        // do not ask me why
-        // this game is taped-together jerry-rigged piece of software
-        // lvl->m_levelDesc = fmt::format("from: {}", this->createAccountType().name);
+        if (!lvl) {
+            log::error("Level not found with ID: {}", levelId);
+            return;
+        }
 
         auto b = new DS_Dictionary();
         lvl->encodeWithCoder(b);
@@ -155,47 +163,45 @@ void SwapManager::registerListeners() {
             .levelString = b->saveRootSubDictToString()
         };
 
-        nm.send(
-            SendLevelPacket::create(std::move(lvlData))
-        );
+        #ifdef CR_DEBUG
+        log::info("Sending level data. Size: {} bytes, name: {}", lvlData.levelString.length(), lvlData.levelName);
+        #endif
+
+        nm.send(SendLevelPacket::create(std::move(lvlData)));
 
         if (lvl && Mod::get()->getSettingValue<bool>("delete-lvls")) {
-            // let's not spam everyone's created levels list
             GameLevelManager::sharedState()->deleteLevel(lvl);
         }
     });
     nm.on<ReceiveSwappedLevelPacket>([this](ReceiveSwappedLevelPacket packet) {
-        // if (packet->levels.size() < swapIdx) {
-        //     FLAlertLayer::create(
-        //         "Creation Rotation",
-        //         "<cr>There was an error while fetching the swapped level. If you're reading this, something has gone terribly wrong, please report it at once.</c>",
-        //         "OK"
-        //     )->show();
-        //     return;
-        // }
         LevelData lvlData;
+        auto myAccountID = cr::utils::createAccountType().accountID;
+        bool foundLevel = false;
 
         for (auto& swappedLevel : packet.levels) {
-            if (swappedLevel.accountID != cr::utils::createAccountType().accountID) continue;
+            if (swappedLevel.accountID == myAccountID) {
+                lvlData = std::move(swappedLevel.level);
+                foundLevel = true;
+                break;
+            }
+        }
 
-            lvlData = std::move(swappedLevel.level);
-            break;
+        if (!foundLevel) {
+            log::error("No level found for current user in swap packet!");
+            Notification::create("Error: Could not receive your level!", NotificationIcon::Error, 3.f)->show();
+            return;
         }
 
         auto lvl = GJGameLevel::create();
-
-        // lvl->m_levelName = lvlData.levelName;
-        // lvl->m_levelString = lvlData.levelString;
-        // lvl->m_songID = lvlData.songID;
-        // lvl->m_songIDs = lvlData.songIDs;
         auto b = new DS_Dictionary();
         b->loadRootSubDictFromString(lvlData.levelString);
         lvl->dataLoaded(b);
-
         lvl->m_levelType = GJLevelType::Editor;
 
         levelId = EditorIDs::getID(lvl);
         LocalLevelManager::get()->m_localLevels->insertObject(lvl, 0);
+
+        Notification::create("Level received! Opening editor...", NotificationIcon::Success, 2.5f)->show();
 
         #ifdef GEODE_IS_MACOS
         try {

@@ -21,8 +21,8 @@ public:
     void updateLobby(LobbySettings updatedLobby);
     void disconnectLobby();
 
-    void getLobbyAccounts(std::function<void(std::vector<Account>)>);
-    void getLobbyInfo(std::function<void(LobbyInfo)>);
+    void getLobbyAccounts(std::function<void(std::vector<Account>)>, std::function<void(std::string)> onError = nullptr);
+    void getLobbyInfo(std::function<void(LobbyInfo)>, std::function<void(std::string)> onError = nullptr);
 
     static LobbySettings createDefaultSettings();
 

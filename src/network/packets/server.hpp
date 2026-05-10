@@ -125,10 +125,62 @@ struct SwappedLevel {
 class ReceiveSwappedLevelPacket : public Packet {
     CR_PACKET(3002, ReceiveSwappedLevelPacket)
 
-    ReceiveSwappedLevelPacket(std::vector<SwappedLevel> levels):
-        levels(levels) {}
-
     std::vector<SwappedLevel> levels;
+
+    ReceiveSwappedLevelPacket() = default;
+
+    void decode(std::string_view in) override {
+        levels.clear();
+        
+        auto jsonResult = matjson::parse(in);
+        if (!jsonResult.isOk()) {
+            log::error("Failed to parse ReceiveSwappedLevelPacket: {}", jsonResult.unwrapErr());
+            return;
+        }
+        
+        auto packetObj = jsonResult.unwrap();
+        
+        matjson::Value packetData;
+        if (packetObj.isObject()) {
+            if (auto pkt = packetObj.asObject()->get("packet")) {
+                packetData = pkt.value();
+            } else {
+                packetData = packetObj;
+            }
+        } else {
+            return;
+        }
+
+        if (!packetData.isObject()) return;
+
+        auto levelsObj = packetData.asObject()->get("levels");
+        if (!levelsObj || !levelsObj->isObject()) return;
+
+        for (auto& [key, value] : levelsObj->asObject().unwrap()) {
+            if (!value.isObject()) continue;
+            
+            SwappedLevel sl;
+            sl.accountID = geode::utils::numFromString<int>(key).unwrapOr(0);
+            
+            auto lvlObj = value.asObject().unwrap();
+            
+            if (auto lvlData = lvlObj.get("level")) {
+                if (lvlData->isObject()) {
+                    auto& ld = lvlData->asObject().unwrap();
+                    if (auto n = ld.get("levelName")) sl.level.levelName = n->asString().unwrapOr("");
+                    if (auto s = ld.get("songID")) sl.level.songID = s->asInt().unwrapOr(0);
+                    if (auto ss = ld.get("songIDs")) sl.level.songIDs = ss->asString().unwrapOr("");
+                    if (auto str = ld.get("levelString")) sl.level.levelString = str->asString().unwrapOr("");
+                }
+            }
+            
+            if (!sl.level.levelString.empty()) {
+                levels.push_back(sl);
+            }
+        }
+        
+        log::info("Parsed {} swapped levels from server", levels.size());
+    }
 
     CR_SERIALIZE(
         CEREAL_NVP(levels)

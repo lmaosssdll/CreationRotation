@@ -203,6 +203,7 @@ class LoginPacket : public Packet {
 
     std::string version = geode::Mod::get()->getVersion().toVString();
     Account account = cr::utils::createAccountType();
+    std::string clientType = "client";
 
     LoginPacket(std::string token) :
         token(std::move(token)) {}
@@ -212,7 +213,8 @@ class LoginPacket : public Packet {
     CR_SERIALIZE(
         CEREAL_NVP(version),
         CEREAL_NVP(account),
-        CEREAL_NVP(token)
+        CEREAL_NVP(token),
+        CEREAL_NVP(clientType)
     )
 };
 

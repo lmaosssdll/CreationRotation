@@ -29,12 +29,21 @@ const swapHandlers: Handlers = {
     },
     
     3001: (socket, args, data, state) => { // SendLevelPacket
-        const { currentLobbyCode: code } = data
+        const { currentLobbyCode: code, account } = data
         if (!code) {
             sendError(socket, "you are not in a lobby")
             return
         }
-        state.swaps[code].addLevel(args.level, data.account?.accountID || 0)
+        
+        // Validate the player is in the swap
+        if (!state.swaps[code]) {
+            sendError(socket, "swap has not been started in this lobby")
+            return
+        }
+        
+        const accId = account?.accountID || 0
+        log.info(`[Swap] Received level from player ${accId} in lobby ${code}`)
+        state.swaps[code].addLevel(args.level, accId)
     }
 }
 

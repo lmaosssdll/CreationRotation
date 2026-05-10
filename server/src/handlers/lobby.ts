@@ -189,7 +189,10 @@ const lobbyHandlers: Handlers = {
         const { currentLobbyCode: lobbyCode, account } = data
         const { userID } = args
 
-        if (!lobbyCode || !account) return
+        if (!lobbyCode || !account) {
+            sendError(socket, "you are not in a lobby")
+            return
+        }
         
         if (!Object.keys(state.lobbies).includes(lobbyCode)) {
             sendError(socket, "invalid lobby code received")
@@ -204,8 +207,14 @@ const lobbyHandlers: Handlers = {
             return
         }
 
+        // Ensure userID is a valid number
+        if (typeof userID !== 'number' || userID <= 0) {
+            sendError(socket, "invalid user ID provided")
+            return
+        }
+
         // Validate that the user exists in the lobby
-        if (!state.sockets[lobbyCode][userID]) {
+        if (!state.sockets[lobbyCode] || !state.sockets[lobbyCode][userID]) {
             sendError(socket, "user is not in this lobby")
             return
         }
