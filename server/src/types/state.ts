@@ -27,8 +27,9 @@ export type ServerState = {
     authManager?: AuthManager
 }
 
-export type LoginInfo = {
+export interface LoginInfo {
     version: string
     account: Account
     token: string
+    clientType?: string
 }

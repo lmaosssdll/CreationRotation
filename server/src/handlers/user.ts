@@ -19,7 +19,8 @@ const userHandlers: Handlers = {
         const modVersion = args.version.replace("v", "").toLowerCase()
         
         // Accept both mod clients and official clients (with "official" or empty clientType)
-        const isOfficialClient = args.clientType === "official" || args.clientType === ""
+        const clientType = (args as any).clientType as string | undefined
+        const isOfficialClient = clientType === "official" || !clientType
         
         // Only check version for mod clients, allow official clients with any version
         if (!isOfficialClient && modVersion !== version) {

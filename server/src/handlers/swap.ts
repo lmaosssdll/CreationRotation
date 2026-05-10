@@ -5,6 +5,7 @@ import {
 } from "@/utils"
 import { Swap, AccsWithIdx } from "@/types/swap"
 import { Packet } from "@/types/packet"
+import log from "@/logging"
 
 const swapHandlers: Handlers = {
     2007: (socket, _, data, state) => { // StartSwapPacket
