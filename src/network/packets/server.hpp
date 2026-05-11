@@ -127,68 +127,6 @@ class ReceiveSwappedLevelPacket : public Packet {
 
     std::vector<SwappedLevel> levels;
 
-    ReceiveSwappedLevelPacket() = default;
-
-    void decode(std::string_view in) override {
-        levels.clear();
-        
-        auto jsonResult = matjson::parse(in);
-        if (!jsonResult.isOk()) {
-            log::error("Failed to parse ReceiveSwappedLevelPacket: {}", jsonResult.unwrapErr());
-            return;
-        }
-        
-        auto packetObj = jsonResult.unwrap();
-        
-        if (!packetObj.isObject()) return;
-
-        auto packetData = packetObj.asObject()->get("packet");
-        if (!packetData) {
-            packetData = packetObj;
-        }
-        
-        if (!packetData->isObject()) return;
-
-        auto levelsObj = packetData->asObject()->get("levels");
-        if (!levelsObj || !levelsObj->isObject()) return;
-
-        auto objMap = levelsObj->asObject().unwrap();
-        for (size_t i = 0; i < objMap.size(); i++) {
-            auto item = objMap.get(i);
-            if (!item.isObject()) continue;
-            
-            auto key = objMap.key(i);
-            
-            SwappedLevel sl;
-            sl.accountID = geode::utils::numFromString<int>(key).unwrapOr(0);
-            
-            auto lvlObj = item.asObject().unwrap();
-            
-            auto lvlDataOpt = lvlObj.get("level");
-            if (lvlDataOpt && lvlDataOpt->isObject()) {
-                auto ld = lvlDataOpt->asObject().unwrap();
-                
-                auto nOpt = ld.get("levelName");
-                if (nOpt) sl.level.levelName = nOpt->asString().unwrapOr("");
-                
-                auto sOpt = ld.get("songID");
-                if (sOpt) sl.level.songID = sOpt->asInt().unwrapOr(0);
-                
-                auto ssOpt = ld.get("songIDs");
-                if (ssOpt) sl.level.songIDs = ssOpt->asString().unwrapOr("");
-                
-                auto strOpt = ld.get("levelString");
-                if (strOpt) sl.level.levelString = strOpt->asString().unwrapOr("");
-            }
-            
-            if (!sl.level.levelString.empty()) {
-                levels.push_back(sl);
-            }
-        }
-        
-        log::info("Parsed {} swapped levels from server", levels.size());
-    }
-
     CR_SERIALIZE(
         CEREAL_NVP(levels)
     )

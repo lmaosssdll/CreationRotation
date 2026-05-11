@@ -3,6 +3,7 @@
 #include <Geode/Geode.hpp>
 #include <types/lobby.hpp>
 #include <defs.hpp>
+#include <functional>
 
 using namespace geode::prelude;
 
@@ -27,6 +28,9 @@ protected:
 
     int currentTurnsLeft = 0;
     int previousTurnsLeft = 0;
+    int targetTurnsLeft = 0;
+
+    std::function<void()> m_animCallback;
 
     virtual bool init(
         std::string p1Name, int p1Icon, cocos2d::ccColor3B p1c1, cocos2d::ccColor3B p1c2,
@@ -34,9 +38,15 @@ protected:
         int turnsLeft
     );
     
-    void animateSwap(std::function<void()> onComplete);
-    void animateTurnsDecrease(int from, int to, std::function<void()> onComplete);
-    void fadeInAndAnimate(std::function<void()> onComplete);
+    void onFlash(CCNode*);
+    void onSwap(CCNode*);
+    void resetPos();
+    void onSwapDone();
+    void onTurnsDone();
+    void doFadeOut();
+
+    void animateSwap();
+    void animateTurns();
     void fadeOutAndRemove();
 
 public:

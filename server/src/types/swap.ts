@@ -240,15 +240,15 @@ swap(ending: boolean = false, reason: string = "") {
         )
 
         if (!this.isSwapEnding) {
-            const levelsObj: { [key: number]: SwappedLevel } = {}
-            for (const level of validLevels) {
-                levelsObj[level.accountID] = level
-            }
-
+            const levelsArray = validLevels.map(level => ({
+                accountID: level.accountID,
+                level: level.level
+            }))
+            
             const nextTurnsLeft = this.totalTurns - this.currentTurn
             
             emitToLobby(this.serverState, this.lobbyCode, Packet.ReceiveSwappedLevelPacket, { 
-                levels: levelsObj,
+                levels: levelsArray,
                 turnsLeft: nextTurnsLeft
             })
 
