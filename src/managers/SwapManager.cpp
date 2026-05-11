@@ -122,7 +122,7 @@ void SwapManager::onMusicSelectionStart(MusicSelectionStartPacket packet) {
     
     Notification::create(
         fmt::format("Music Selection Phase!\n15 seconds to pick your music!\nPlayers: {}", playersStr),
-        NotificationIcon::Clock,
+        NotificationIcon::Info,
         3.0f
     )->show();
 
@@ -138,7 +138,7 @@ void SwapManager::onTimeToSwap() {
 
     getLobbyInfo([this](LobbyInfo info) {
         if (info.accounts.size() >= 2) {
-            auto& gm = GameManager::get();
+            auto gm = GameManager::get();
             
             auto myAccID = cr::utils::createAccountType().accountID;
             
@@ -195,7 +195,7 @@ void SwapManager::onTimeToSwap() {
 }
 
 void SwapManager::showSwapAnimation(Account player1, Account player2) {
-    auto& gm = GameManager::get();
+    auto gm = GameManager::get();
     
     auto c1 = gm->colorForIdx(player1.color1);
     auto c2 = gm->colorForIdx(player1.color2);

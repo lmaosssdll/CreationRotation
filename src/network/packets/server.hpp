@@ -140,38 +140,45 @@ class ReceiveSwappedLevelPacket : public Packet {
         
         auto packetObj = jsonResult.unwrap();
         
-        matjson::Value packetData;
-        if (packetObj.isObject()) {
-            if (auto pkt = packetObj.asObject()->get("packet")) {
-                packetData = pkt.value();
-            } else {
-                packetData = packetObj;
-            }
-        } else {
-            return;
+        if (!packetObj.isObject()) return;
+
+        auto packetData = packetObj.asObject()->get("packet");
+        if (!packetData) {
+            packetData = packetObj;
         }
+        
+        if (!packetData->isObject()) return;
 
-        if (!packetData.isObject()) return;
-
-        auto levelsObj = packetData.asObject()->get("levels");
+        auto levelsObj = packetData->asObject()->get("levels");
         if (!levelsObj || !levelsObj->isObject()) return;
 
-        for (auto& [key, value] : levelsObj->asObject().unwrap()) {
-            if (!value.isObject()) continue;
+        auto objMap = levelsObj->asObject().unwrap();
+        for (size_t i = 0; i < objMap.size(); i++) {
+            auto item = objMap.get(i);
+            if (!item.isObject()) continue;
+            
+            auto key = objMap.key(i);
             
             SwappedLevel sl;
             sl.accountID = geode::utils::numFromString<int>(key).unwrapOr(0);
             
-            auto lvlObj = value.asObject().unwrap();
+            auto lvlObj = item.asObject().unwrap();
             
-            if (auto lvlData = lvlObj.get("level")) {
-                if (lvlData->isObject()) {
-                    auto& ld = lvlData->asObject().unwrap();
-                    if (auto n = ld.get("levelName")) sl.level.levelName = n->asString().unwrapOr("");
-                    if (auto s = ld.get("songID")) sl.level.songID = s->asInt().unwrapOr(0);
-                    if (auto ss = ld.get("songIDs")) sl.level.songIDs = ss->asString().unwrapOr("");
-                    if (auto str = ld.get("levelString")) sl.level.levelString = str->asString().unwrapOr("");
-                }
+            auto lvlDataOpt = lvlObj.get("level");
+            if (lvlDataOpt && lvlDataOpt->isObject()) {
+                auto ld = lvlDataOpt->asObject().unwrap();
+                
+                auto nOpt = ld.get("levelName");
+                if (nOpt) sl.level.levelName = nOpt->asString().unwrapOr("");
+                
+                auto sOpt = ld.get("songID");
+                if (sOpt) sl.level.songID = sOpt->asInt().unwrapOr(0);
+                
+                auto ssOpt = ld.get("songIDs");
+                if (ssOpt) sl.level.songIDs = ssOpt->asString().unwrapOr("");
+                
+                auto strOpt = ld.get("levelString");
+                if (strOpt) sl.level.levelString = strOpt->asString().unwrapOr("");
             }
             
             if (!sl.level.levelString.empty()) {
