@@ -35,10 +35,18 @@ public:
 
     int levelId;
 
+    int currentTurnsLeft = 0;
+    int previousTurnsLeft = 0;
+
     void startSwap(SwapStartedPacket packet);
 
     void registerListeners();
     int getTimeRemaining();
+
+    void onMusicSelectionStart(MusicSelectionStartPacket packet);
+    void onTimeToSwap();
+
+    void showSwapAnimation(Account player1, Account player2);
 
 protected:
     SwapManager();

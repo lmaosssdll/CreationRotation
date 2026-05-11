@@ -127,59 +127,93 @@ class $modify(CRBrowserLayer, LevelBrowserLayer) {
 };
 
 class $modify(CREditorUI, EditorUI) {
-	struct Fields {
-		CCLabelBMFont* timerLabel;
-	};
+    struct Fields {
+        CCLabelBMFont* timerLabel;
+        bool isWarningState = false;
+        bool isShaking = false;
+        cocos2d::ccColor3B normalColor;
+    };
 
-	bool init(LevelEditorLayer* editorLayer) {
-		if (!EditorUI::init(editorLayer)) return false;
+    bool init(LevelEditorLayer* editorLayer) {
+        if (!EditorUI::init(editorLayer)) return false;
 
-		auto& sm = SwapManager::get();
-		if (sm.currentLobbyCode == "") return true;
+        auto& sm = SwapManager::get();
+        if (sm.currentLobbyCode == "") return true;
 
-		m_fields->timerLabel = CCLabelBMFont::create(
-			"00:00",
-			"bigFont.fnt"
-		);
-		m_fields->timerLabel->setScale(0.5f);
-		m_fields->timerLabel->setOpacity(0.5f * 255.f);
-		
-		auto sliderPos = m_positionSlider->m_sliderBar->convertToWorldSpace({0, 0});
-		m_fields->timerLabel->setPosition({
-			CCDirector::sharedDirector()->getWinSize().width / 2.f,
-			sliderPos.y - 35.f
-		});
-		m_fields->timerLabel->setAnchorPoint({0.5f, 0.5f});
+        m_fields->normalColor = {255, 255, 255};
 
-		this->schedule(schedule_selector(CREditorUI::updateTimer), 1);
+        m_fields->timerLabel = CCLabelBMFont::create(
+            "00:00",
+            "bigFont.fnt"
+        );
+        m_fields->timerLabel->setScale(0.5f);
+        m_fields->timerLabel->setColor(m_fields->normalColor);
+        m_fields->timerLabel->setOpacity(0.8f * 255.f);
+        
+        auto sliderPos = m_positionSlider->m_sliderBar->convertToWorldSpace({0, 0});
+        m_fields->timerLabel->setPosition({
+            CCDirector::sharedDirector()->getWinSize().width / 2.f,
+            sliderPos.y - 35.f
+        });
+        m_fields->timerLabel->setAnchorPoint({0.5f, 0.5f});
+        m_fields->timerLabel->setZOrder(999);
 
-		this->addChild(m_fields->timerLabel);
+        this->schedule(schedule_selector(CREditorUI::updateTimer), 0.1f);
 
-		return true;
-	}
+        this->addChild(m_fields->timerLabel);
 
-	void showUI(bool shouldShow) {
-		EditorUI::showUI(shouldShow);
+        return true;
+    }
 
-		if (!m_fields->timerLabel) return;
+    void showUI(bool shouldShow) {
+        EditorUI::showUI(shouldShow);
 
-		m_fields->timerLabel->setVisible(shouldShow);
-	}
+        if (!m_fields->timerLabel) return;
 
-	void updateTimer(float dt) {
-		if (!m_fields->timerLabel) return;
+        m_fields->timerLabel->setVisible(shouldShow);
+    }
 
-		auto& sm = SwapManager::get();
+    void updateTimer(float dt) {
+        if (!m_fields->timerLabel) return;
 
-		if (sm.getTimeRemaining() <= 0) {
-			return;
-		}
+        auto& sm = SwapManager::get();
+        auto remaining = sm.getTimeRemaining();
 
-		auto timeDur = std::chrono::duration<int>(sm.getTimeRemaining());
-		auto timeString = fmt::format("{:%M:%S}", timeDur);
+        if (remaining <= 0) {
+            return;
+        }
 
-		m_fields->timerLabel->setString(timeString.c_str());
-	}
+        auto timeDur = std::chrono::duration<int>(remaining);
+        auto timeString = fmt::format("{:%M:%S}", timeDur);
+
+        m_fields->timerLabel->setString(timeString.c_str());
+
+        if (remaining <= 10 && !m_fields->isWarningState) {
+            m_fields->isWarningState = true;
+            m_fields->isShaking = true;
+            m_fields->timerLabel->setColor({255, 50, 50});
+            m_fields->timerLabel->setOpacity(1.0f * 255.f);
+            
+            this->schedule(schedule_selector(CREditorUI::shakeTimer), 0.05f);
+        } else if (remaining > 10 && m_fields->isWarningState) {
+            m_fields->isWarningState = false;
+            m_fields->isShaking = false;
+            this->unschedule(schedule_selector(CREditorUI::shakeTimer));
+            m_fields->timerLabel->setColor(m_fields->normalColor);
+            m_fields->timerLabel->setOpacity(0.8f * 255.f);
+            m_fields->timerLabel->setPositionX(CCDirector::sharedDirector()->getWinSize().width / 2.f);
+        }
+    }
+
+    void shakeTimer(float dt) {
+        if (!m_fields->timerLabel || !m_fields->isShaking) return;
+        
+        auto winSize = CCDirector::sharedDirector()->getWinSize();
+        auto baseX = winSize.width / 2.f;
+        auto offset = (rand() % 5 - 2) * 1.5f;
+        
+        m_fields->timerLabel->setPositionX(baseX + offset);
+    }
 };
 
 class $modify(CRLvlInfoLayer, LevelInfoLayer) {

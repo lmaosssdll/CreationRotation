@@ -62,6 +62,11 @@ export class Swap {
     serverState: ServerState
     timeout!: NodeJS.Timeout
     turnTimeout!: NodeJS.Timeout
+    musicSelectionTimeout!: NodeJS.Timeout
+
+    // Music selection phase
+    isMusicSelectionPhase: boolean = false
+    currentMusicPlayerIndex: number = 0
 
     constructor(lobbyCode: string, state: ServerState) {
         this.lobbyCode = lobbyCode
@@ -82,23 +87,41 @@ export class Swap {
         this.swapOrder = this.lobby.accounts.map(acc => acc.accountID)
     }
 
-    swap(ending: boolean = false, reason: string = "") {
+swap(ending: boolean = false, reason: string = "") {
         this.levels = []
         this.currentTurn++
         this.currentlySwapping = true
         this.isSwapEnding = ending
         this.closeReason = reason
 
-        // Recalculate swapOrder based on current lobby members
         const currentLobbyAccounts = this.serverState.lobbies[this.lobbyCode].accounts
         this.swapOrder = currentLobbyAccounts.map(acc => acc.accountID)
 
         log.debug(`[Swap] Turn ${this.currentTurn}/${this.totalTurns} started for lobby ${this.lobbyCode}. Swap order: ${this.swapOrder}`)
 
-        // Set turn timeout
-        this.scheduleNextSwap()
+        this.startMusicSelectionPhase()
+    }
 
-        emitToLobby(this.serverState, this.lobbyCode, Packet.TimeToSwapPacket, {})
+    startMusicSelectionPhase() {
+        this.isMusicSelectionPhase = true
+        this.currentMusicPlayerIndex = 0
+        
+        const players = this.lobby.accounts.map(acc => acc.name)
+        const turnsLeft = this.totalTurns - this.currentTurn
+        const previousTurnsLeft = this.totalTurns - this.currentTurn + 1
+        
+        emitToLobby(this.serverState, this.lobbyCode, Packet.MusicSelectionStartPacket, { 
+            countdown: 15, 
+            players,
+            turnsLeft,
+            previousTurnsLeft
+        })
+        
+        this.musicSelectionTimeout = setTimeout(() => {
+            this.isMusicSelectionPhase = false
+            this.scheduleNextSwap()
+            emitToLobby(this.serverState, this.lobbyCode, Packet.TimeToSwapPacket, {})
+        }, 15_000)
     }
 
     addLevel(level: LevelData, accId: number) {
@@ -207,23 +230,27 @@ export class Swap {
         if (!this.currentlySwapping && this.levels.length === 0) return
 
         this.currentlySwapping = false
+        this.isMusicSelectionPhase = false
         log.info(`[Swap] Completing turn ${this.currentTurn} with ${this.levels.length} levels for lobby ${this.lobbyCode}.`)
 
         const currentLobbyAccounts = this.serverState.lobbies[this.lobbyCode].accounts
 
-        // Only send levels to players who are actually still in the lobby
         const validLevels = this.levels.filter(l =>
             currentLobbyAccounts.some(acc => acc.accountID === l.accountID)
         )
 
         if (!this.isSwapEnding) {
-            // Convert array to object format expected by client
             const levelsObj: { [key: number]: SwappedLevel } = {}
             for (const level of validLevels) {
                 levelsObj[level.accountID] = level
             }
 
-            emitToLobby(this.serverState, this.lobbyCode, Packet.ReceiveSwappedLevelPacket, { levels: levelsObj })
+            const nextTurnsLeft = this.totalTurns - this.currentTurn
+            
+            emitToLobby(this.serverState, this.lobbyCode, Packet.ReceiveSwappedLevelPacket, { 
+                levels: levelsObj,
+                turnsLeft: nextTurnsLeft
+            })
 
             this.levels = []
 
@@ -259,8 +286,15 @@ export class Swap {
         }
     }
 
+    clearMusicSelectionTimeout() {
+        if (this.musicSelectionTimeout) {
+            clearTimeout(this.musicSelectionTimeout)
+        }
+    }
+
     unscheduleNextSwap() {
         clearTimeout(this.timeout)
         this.clearTurnTimeout()
+        this.clearMusicSelectionTimeout()
     }
 }

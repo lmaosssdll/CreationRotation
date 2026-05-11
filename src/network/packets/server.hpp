@@ -195,6 +195,38 @@ class SwapEndedPacket : public Packet {
     CR_SERIALIZE(dummy)
 };
 
+class MusicSelectionStartPacket : public Packet {
+    CR_PACKET(3010, MusicSelectionStartPacket)
+
+    int countdown = 15;
+    std::vector<std::string> players;
+    int turnsLeft = 0;
+    int previousTurnsLeft = 0;
+
+    CR_SERIALIZE(
+        CEREAL_NVP(countdown),
+        CEREAL_NVP(players),
+        CEREAL_NVP(turnsLeft),
+        CEREAL_NVP(previousTurnsLeft)
+    )
+};
+
+class TimeToSwapMusicPacket : public Packet {
+    CR_PACKET(3011, TimeToSwapMusicPacket)
+
+    std::string playerName;
+    int iconID = 0;
+    int color1 = 0;
+    int color2 = 0;
+
+    CR_SERIALIZE(
+        CEREAL_NVP(playerName),
+        CEREAL_NVP(iconID),
+        CEREAL_NVP(color1),
+        CEREAL_NVP(color2)
+    )
+};
+
 // OTHER STUFF //
 
 class ErrorPacket : public Packet {

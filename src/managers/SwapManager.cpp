@@ -7,6 +7,7 @@
 #include <matjson/reflect.hpp>
 
 #include <layers/ChatPanel.hpp>
+#include <layers/SwapAnimationLayer.hpp>
 #include <utils.hpp>
 
 using namespace geode::prelude;
@@ -109,37 +110,54 @@ void SwapManager::disconnectLobby() {
 
 // LEVEL SWAP //
 
-void SwapManager::startSwap(SwapStartedPacket packet) {
-    getLobbyInfo([this](LobbyInfo info) {
-        secondsPerRound = info.settings.minutesPerTurn * 60;
-        log::info("Swap started. {} minutes per turn", info.settings.minutesPerTurn);
-    });
-
-    registerListeners();
-
-    auto glm = GameLevelManager::sharedState();
-    auto newLvl = glm->createNewLevel();
-
-    levelId = EditorIDs::getID(newLvl);
+void SwapManager::onMusicSelectionStart(MusicSelectionStartPacket packet) {
+    this->currentTurnsLeft = packet.turnsLeft;
+    this->previousTurnsLeft = packet.previousTurnsLeft;
     
-    log::info("Created new level with ID: {}", levelId);
+    std::string playersStr = "";
+    for (size_t i = 0; i < packet.players.size(); i++) {
+        if (i > 0) playersStr += ", ";
+        playersStr += packet.players[i];
+    }
+    
+    Notification::create(
+        fmt::format("Music Selection Phase!\n15 seconds to pick your music!\nPlayers: {}", playersStr),
+        NotificationIcon::Clock,
+        3.0f
+    )->show();
 
-    roundStartedTime = time(nullptr);
-
-    auto scene = EditLevelLayer::scene(newLvl);
-    cr::utils::replaceScene(scene);
+    Notification::create(
+        "You have <cy>15 seconds</c> to select your music!",
+        CCSprite::createWithSpriteFrameName("GJ_musicBtn_001.png"),
+        4.0f
+    )->show();
 }
+    
+void SwapManager::onTimeToSwap() {
+    this->previousTurnsLeft = this->currentTurnsLeft;
 
-void SwapManager::registerListeners() {
-    CR_REQUIRE_CONNECTION()
-
-    auto& nm = NetworkManager::get();
-
-    nm.setDisconnectCallback([](std::string reason) {});
-
-    nm.on<TimeToSwapPacket>([this](TimeToSwapPacket p) {
-        auto& nm = NetworkManager::get();
-
+    getLobbyInfo([this](LobbyInfo info) {
+        if (info.accounts.size() >= 2) {
+            auto& gm = GameManager::get();
+            
+            auto myAccID = cr::utils::createAccountType().accountID;
+            
+            Account* p1 = nullptr;
+            Account* p2 = nullptr;
+            
+            for (auto& acc : info.accounts) {
+                if (acc.accountID == myAccID) {
+                    p1 = &acc;
+                } else if (!p2) {
+                    p2 = &acc;
+                }
+            }
+            
+            if (p1 && p2) {
+                this->showSwapAnimation(*p1, *p2);
+            }
+        }
+        
         Notification::create("Sending your level...", NotificationIcon::Info, 2.5f)->show();
 
         if (auto editorLayer = LevelEditorLayer::get()) {
@@ -167,13 +185,70 @@ void SwapManager::registerListeners() {
         log::info("Sending level data. Size: {} bytes, name: {}", lvlData.levelString.length(), lvlData.levelName);
         #endif
 
+        auto& nm = NetworkManager::get();
         nm.send(SendLevelPacket::create(std::move(lvlData)));
 
         if (lvl && Mod::get()->getSettingValue<bool>("delete-lvls")) {
             GameLevelManager::sharedState()->deleteLevel(lvl);
         }
     });
+}
+
+void SwapManager::showSwapAnimation(Account player1, Account player2) {
+    auto& gm = GameManager::get();
+    
+    auto c1 = gm->colorForIdx(player1.color1);
+    auto c2 = gm->colorForIdx(player1.color2);
+    auto c3 = gm->colorForIdx(player2.color1);
+    auto c4 = gm->colorForIdx(player2.color2);
+    
+    SwapAnimationLayer::showSwapAnimation(
+        player1.name, player1.iconID, c1, c2,
+        player2.name, player2.iconID, c3, c4,
+        this->currentTurnsLeft, this->previousTurnsLeft
+    );
+}
+
+void SwapManager::startSwap(SwapStartedPacket packet) {
+    getLobbyInfo([this](LobbyInfo info) {
+        secondsPerRound = info.settings.minutesPerTurn * 60;
+        this->currentTurnsLeft = info.settings.turns * static_cast<int>(info.accounts.size());
+        this->previousTurnsLeft = this->currentTurnsLeft;
+        log::info("Swap started. {} minutes per turn, {} turns total", info.settings.minutesPerTurn, this->currentTurnsLeft);
+    });
+
+    registerListeners();
+
+    auto glm = GameLevelManager::sharedState();
+    auto newLvl = glm->createNewLevel();
+
+    levelId = EditorIDs::getID(newLvl);
+    
+    log::info("Created new level with ID: {}", levelId);
+
+    roundStartedTime = time(nullptr);
+
+    auto scene = EditLevelLayer::scene(newLvl);
+    cr::utils::replaceScene(scene);
+}
+
+void SwapManager::registerListeners() {
+    CR_REQUIRE_CONNECTION()
+
+    auto& nm = NetworkManager::get();
+
+    nm.setDisconnectCallback([](std::string reason) {});
+
+    nm.on<MusicSelectionStartPacket>([this](MusicSelectionStartPacket packet) {
+        this->onMusicSelectionStart(packet);
+    });
+
+    nm.on<TimeToSwapPacket>([this](TimeToSwapPacket p) {
+        this->onTimeToSwap();
+    });
     nm.on<ReceiveSwappedLevelPacket>([this](ReceiveSwappedLevelPacket packet) {
+        this->currentTurnsLeft--;
+        
         LevelData lvlData;
         auto myAccountID = cr::utils::createAccountType().accountID;
         bool foundLevel = false;

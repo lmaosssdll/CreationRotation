@@ -14,6 +14,8 @@ export enum Packet {
     MessageSentPacket = "1009",
     ReceiveSwappedLevelPacket = "3002",
     SwapEndedPacket = "3003",
+    MusicSelectionStartPacket = "3010",
+    TimeToSwapMusicPacket = "3011",
     ErrorPacket = "4001",
     BannedUserPacket = "4002",
     AuthorizedUserPacket = "4003",
@@ -35,8 +37,10 @@ export interface ServerToClientEvents {
     "1007": {} // JoinedLobbyPacket
     "1008": { lobbies: Lobby[] } // ReceivePublicLobbiesPacket
     "1009": { message: Message } // MessageSentPacket
-    "3002": { levels: { [key: number]: SwappedLevel } } // ReceiveSwappedLevelPacket
+    "3002": { levels: { [key: number]: SwappedLevel }, turnsLeft?: number } // ReceiveSwappedLevelPacket
     "3003": {} // SwapEndedPacket
+    "3010": { countdown: number, players: string[] } // MusicSelectionStartPacket
+    "3011": { playerName: string, iconID: number, color1: number, color2: number } // TimeToSwapMusicPacket
     "4001": { error: string } // ErrorPacket
     "4002": {} // BannedUserPacket
     "4003": {} // AuthorizedUserPacket
